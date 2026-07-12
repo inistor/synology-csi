@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"net/url"
 	"regexp"
+	"time"
 
 	"github.com/SynologyOpenSource/synology-csi/pkg/logger"
 	log "github.com/sirupsen/logrus"
@@ -54,9 +55,13 @@ type Response struct {
 	Data       interface{}
 }
 
+// Set a timeout on all DSM API requests so that an unresponsive DSM results in failing
+// (retryable) requests instead of hanging goroutines indefinitely.
+const requestTimeout = 60 * time.Second
+
 func (dsm *DSM) newHTTPClient() (*http.Client, error) {
 	if !dsm.Https {
-		return &http.Client{}, nil
+		return &http.Client{Timeout: requestTimeout}, nil
 	}
 
 	tlsCfg := &tls.Config{}
@@ -87,7 +92,7 @@ func (dsm *DSM) newHTTPClient() (*http.Client, error) {
 	tr := http.DefaultTransport.(*http.Transport).Clone()
 	tr.TLSClientConfig = tlsCfg
 
-	return &http.Client{Transport: tr}, nil
+	return &http.Client{Transport: tr, Timeout: requestTimeout}, nil
 }
 
 func (dsm *DSM) sendRequest(data string, apiTemplate interface{}, params url.Values, cgiPath string) (Response, error) {
