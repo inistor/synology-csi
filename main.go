@@ -5,6 +5,7 @@
 package main
 
 import (
+	"errors"
 	"os"
 	"os/signal"
 	"syscall"
@@ -77,6 +78,9 @@ func driverStart() error {
 		if err != nil {
 			log.Errorf("Failed to add DSM: %s, error: %v", client.Host, err)
 		}
+	}
+	if dsmService.GetDsmsCount() == 0 {
+		return errors.New("failed to login to any configured DSMs")
 	}
 	defer dsmService.RemoveAllDsms()
 
