@@ -32,15 +32,17 @@ func (e *recordingExecutor) Command(cmd string, args ...string) utilexec.Cmd {
 		out = e.sessionOutput
 	}
 
+	action := func() ([]byte, []byte, error) {
+		if e.fail != "" && strings.Contains(line, e.fail) {
+			return []byte("boom"), nil, fmt.Errorf("command failed")
+		}
+		return []byte(out), nil, nil
+	}
+	// The session list is read with Output(), everything else with
+	// CombinedOutput(), so answer either.
 	fake := &testingexec.FakeCmd{
-		CombinedOutputScript: []testingexec.FakeAction{
-			func() ([]byte, []byte, error) {
-				if e.fail != "" && strings.Contains(line, e.fail) {
-					return []byte("boom"), nil, fmt.Errorf("command failed")
-				}
-				return []byte(out), nil, nil
-			},
-		},
+		CombinedOutputScript: []testingexec.FakeAction{action},
+		OutputScript:         []testingexec.FakeAction{action},
 	}
 	return fake
 }

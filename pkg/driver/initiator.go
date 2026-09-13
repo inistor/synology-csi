@@ -72,20 +72,28 @@ func parseSessions(lines string) []iscsiSession {
 	var sessions []iscsiSession
 	for _, entry := range entries {
 		e := strings.Fields(entry)
-		if len(e) < 4 {
+		if len(e) < 4 || !strings.HasSuffix(e[0], ":") {
 			continue
 		}
-		protocol := strings.Split(e[0], ":")[0]
-		id := r.Replace(e[1])
-		id64, _ := strconv.ParseInt(id, 10, 32)
-		portal := strings.Split(e[2], ",")[0]
+		// iscsiadm diagnostics ("iscsiadm: could not ...") also have four fields
+		// and a colon-terminated first field; the bracketed session id is what
+		// tells a real session line apart from one.
+		id64, err := strconv.ParseInt(r.Replace(e[1]), 10, 32)
+		if err != nil {
+			continue
+		}
+
+		var name string
+		if iqn := strings.SplitN(e[3], ":", 2); len(iqn) == 2 {
+			name = iqn[1]
+		}
 
 		s := iscsiSession{
-			Protocol: protocol,
+			Protocol: strings.Split(e[0], ":")[0],
 			Id:       int32(id64),
-			Portal:   portal,
+			Portal:   strings.Split(e[2], ",")[0],
 			Iqn:      e[3],
-			Name:     strings.Split(e[3], ":")[1],
+			Name:     name,
 		}
 		sessions = append(sessions, s)
 	}
@@ -93,15 +101,27 @@ func parseSessions(lines string) []iscsiSession {
 	return sessions
 }
 
+// commandStderr recovers the stderr captured by Output(), which CombinedOutput()
+// would otherwise have folded into the returned bytes.
+func commandStderr(err error) string {
+	var exitErr *utilexec.ExitErrorWrapper
+	if errors.As(err, &exitErr) {
+		return strings.TrimSpace(string(exitErr.Stderr))
+	}
+	return ""
+}
+
 func (t *tools) iscsiadm_session() []iscsiSession {
 	cmd := t.iscsiadm("-m", "session")
-	out, err := cmd.CombinedOutput()
+	// Output() rather than CombinedOutput(): iscsiadm diagnostics go to stderr
+	// and must never reach parseSessions.
+	out, err := cmd.Output()
 	if err != nil {
 		exitErr, ok := err.(utilexec.ExitError)
 		if ok && exitErr.ExitStatus() == 21 { // iscsiadm: No active sessions
 			log.Info("No active iscsi session found.")
 		} else {
-			log.Errorf("Failed to run iscsiadm session: %v", err)
+			log.Errorf("Failed to run iscsiadm session: %v: %s", err, commandStderr(err))
 		}
 		return []iscsiSession{}
 	}
