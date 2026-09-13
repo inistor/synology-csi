@@ -21,12 +21,15 @@ package driver
 import (
 	"context"
 	"fmt"
+	"runtime/debug"
 	"strings"
 
 	"github.com/container-storage-interface/spec/lib/go/csi"
 	"github.com/kubernetes-csi/csi-lib-utils/protosanitizer"
 	log "github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	clientset "k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/mount-utils"
@@ -118,10 +121,21 @@ func RunControllerandNodePublishServer(endpoint string, d *Driver, cs csi.Contro
 	s.Start(endpoint, ids, cs, ns)
 }
 
-func logGRPC(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
+func logGRPC(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (resp interface{}, err error) {
 	log.Infof("GRPC call: %s", info.FullMethod)
 	log.Infof("GRPC request: %s", protosanitizer.StripSecrets(req))
-	resp, err := handler(ctx, req)
+
+	// An unhandled panic takes down the whole plugin, abandoning every other
+	// in-flight RPC; failing only this call leaves them to finish and lets the
+	// CO retry.
+	defer func() {
+		if r := recover(); r != nil {
+			log.Errorf("GRPC panic in %s: %v\n%s", info.FullMethod, r, debug.Stack())
+			resp, err = nil, status.Errorf(codes.Internal, "panic in %s: %v", info.FullMethod, r)
+		}
+	}()
+
+	resp, err = handler(ctx, req)
 	if err != nil {
 		log.Errorf("GRPC error: %v", err)
 	} else {
