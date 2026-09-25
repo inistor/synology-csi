@@ -9,10 +9,12 @@ import (
 	"crypto/x509"
 	"encoding/json"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"net/http"
 	"net/url"
 	"regexp"
+	"sync"
 	"time"
 
 	"github.com/SynologyOpenSource/synology-csi/pkg/logger"
@@ -31,6 +33,10 @@ type DSM struct {
 	TLSServerName      string
 	InsecureSkipVerify bool
 	SystemInfo
+
+	clientOnce sync.Once
+	client     *http.Client
+	clientErr  error
 }
 
 type SystemInfo struct {
@@ -95,6 +101,14 @@ func (dsm *DSM) newHTTPClient() (*http.Client, error) {
 	return &http.Client{Transport: tr, Timeout: requestTimeout}, nil
 }
 
+// httpClient returns one client per DSM, so its connection pool outlives a single request.
+func (dsm *DSM) httpClient() (*http.Client, error) {
+	dsm.clientOnce.Do(func() {
+		dsm.client, dsm.clientErr = dsm.newHTTPClient()
+	})
+	return dsm.client, dsm.clientErr
+}
+
 func (dsm *DSM) sendRequest(data string, apiTemplate interface{}, params url.Values, cgiPath string) (Response, error) {
 	resp, err := dsm.sendRequestWithoutConnectionCheck(data, apiTemplate, params, cgiPath)
 	if err != nil && (resp.ErrorCode == 105 || resp.ErrorCode == 106 || resp.ErrorCode == 119) { // 105: WEBAPI_ERR_NO_PERMISSION, 106: session timeout, 119: WEBAPI_ERR_SID_NOT_FOUND
@@ -110,7 +124,7 @@ func (dsm *DSM) sendRequest(data string, apiTemplate interface{}, params url.Val
 }
 
 func (dsm *DSM) sendRequestWithoutConnectionCheck(data string, apiTemplate interface{}, params url.Values, cgiPath string) (Response, error) {
-	client, err := dsm.newHTTPClient()
+	client, err := dsm.httpClient()
 	if err != nil {
 		return Response{}, err
 	}
@@ -151,7 +165,11 @@ func (dsm *DSM) sendRequestWithoutConnectionCheck(data string, apiTemplate inter
 	if err != nil {
 		return Response{}, err
 	}
-	defer resp.Body.Close()
+	defer func() {
+		// DSM sends the terminating chunk after the JSON; closing before it arrives discards the connection.
+		io.Copy(io.Discard, resp.Body)
+		resp.Body.Close()
+	}()
 
 	// For debug print text body
 	var bodyText []byte
