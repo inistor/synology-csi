@@ -22,6 +22,29 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
+// chmodBits are the mode bits chmod sets: permissions plus setuid, setgid and sticky.
+const chmodBits = os.ModePerm | os.ModeSetuid | os.ModeSetgid | os.ModeSticky
+
+// fileModeFromOctal converts a Unix octal mode such as the StorageClass's
+// mountPermissions ("2777") to an os.FileMode. A plain os.FileMode(0o2777) is
+// wrong: Go keeps setuid/setgid/sticky in separate high bits, so the 0o7000
+// digits would be silently dropped. That made "2777" compare equal to a 0777
+// directory and skip the chmod, which on DSM's ACL-enabled shares is what grants
+// non-root users access to a new volume.
+func fileModeFromOctal(m uint64) os.FileMode {
+	mode := os.FileMode(m & 0o777)
+	if m&0o4000 != 0 {
+		mode |= os.ModeSetuid
+	}
+	if m&0o2000 != 0 {
+		mode |= os.ModeSetgid
+	}
+	if m&0o1000 != 0 {
+		mode |= os.ModeSticky
+	}
+	return mode
+}
+
 // mountPermissionsFor works out what to chmod a freshly mounted volume root to,
 // given what the StorageClass asked for and what is already there.
 //
@@ -45,7 +68,7 @@ import (
 // first mount, so the requested permissions are what a plain volume gets.
 func mountPermissionsFor(current, requested os.FileMode) os.FileMode {
 	if current&os.ModeSetgid == 0 {
-		return requested.Perm()
+		return requested & chmodBits
 	}
 	const groupBits = 0o070
 	return requested.Perm()&^groupBits | current.Perm()&groupBits | os.ModeSetgid
@@ -61,7 +84,7 @@ func chmodIfPermissionMismatch(targetPath string, mode os.FileMode) error {
 	want := mountPermissionsFor(info.Mode(), mode)
 	// Compare the bits chmod would actually write, so a volume kubelet already
 	// set up is left alone instead of being rewritten to the same value.
-	if info.Mode()&(os.ModePerm|os.ModeSetgid) != want {
+	if info.Mode()&chmodBits != want {
 		log.Infof("chmod targetPath(%s, mode:0%o) with permissions(0%o)", targetPath, info.Mode(), want)
 		if err := os.Chmod(targetPath, want); err != nil {
 			return err

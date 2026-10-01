@@ -59,6 +59,15 @@ func TestMountPermissionsFor(t *testing.T) {
 			requested: 0o770,
 			want:      0o770,
 		},
+		{
+			// A new DSM share reads as 0777 whatever its ACL says. "2777" must
+			// still differ from it, or the chmod that opens the share to
+			// non-root users never runs.
+			name:      "requested setgid is applied to an untouched volume",
+			current:   os.ModeDir | 0o777,
+			requested: os.ModeSetgid | 0o777,
+			want:      os.ModeSetgid | 0o777,
+		},
 	}
 
 	for _, tc := range cases {
@@ -75,6 +84,25 @@ func TestMountPermissionsFor(t *testing.T) {
 // and still has rwx. Whatever mountPermissions asks for, the result has to keep
 // satisfying that once kubelet has marked the volume -- otherwise the walk
 // happens again on every mount and rewrites ownership the workload set itself.
+func TestFileModeFromOctal(t *testing.T) {
+	cases := []struct {
+		octal uint64
+		want  os.FileMode
+	}{
+		{0o750, 0o750},
+		{0o777, 0o777},
+		{0o2777, os.ModeSetgid | 0o777},
+		{0o4755, os.ModeSetuid | 0o755},
+		{0o1777, os.ModeSticky | 0o777},
+		{0o7777, os.ModeSetuid | os.ModeSetgid | os.ModeSticky | 0o777},
+	}
+	for _, tc := range cases {
+		if got := fileModeFromOctal(tc.octal); got != tc.want {
+			t.Errorf("fileModeFromOctal(%#o) = %v, want %v", tc.octal, got, tc.want)
+		}
+	}
+}
+
 func TestResultKeepsKubeletFromRedoingTheChown(t *testing.T) {
 	const kubeletNeeds = 0o070 // group rwx
 

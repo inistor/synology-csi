@@ -152,7 +152,7 @@ func createTargetMountPathNFS(mounter mount.Interface, mountPath string, mountPe
 	notMount, err := mounter.IsLikelyNotMountPoint(mountPath)
 	if err != nil {
 		if os.IsNotExist(err) {
-			if err := os.MkdirAll(mountPath, os.FileMode(mountPermissionsUint)); err != nil {
+			if err := os.MkdirAll(mountPath, fileModeFromOctal(mountPermissionsUint)); err != nil {
 				return notMount, err
 			}
 			notMount = true
@@ -927,7 +927,7 @@ func (ns *nodeServer) NodePublishVolume(ctx context.Context, req *csi.NodePublis
 		}
 
 		if mountPermissionsUint > 0 {
-			if err := chmodIfPermissionMismatch(targetPath, os.FileMode(mountPermissionsUint)); err != nil {
+			if err := chmodIfPermissionMismatch(targetPath, fileModeFromOctal(mountPermissionsUint)); err != nil {
 				return nil, status.Error(codes.Internal, err.Error())
 			}
 		}
