@@ -17,11 +17,7 @@ import (
 // EBUSY (still mounted) and ENOTEMPTY (files left behind) point at different
 // bugs, so the error must say which one stopped the target path's removal.
 func TestNodeUnpublishReportsWhyTargetPathRemovalFailed(t *testing.T) {
-	// Resolved, because the fake mounter matches mount points by real path.
-	targetPath, err := filepath.EvalSymlinks(t.TempDir())
-	if err != nil {
-		t.Fatal(err)
-	}
+	targetPath := mountTempDir(t)
 	if err := os.WriteFile(filepath.Join(targetPath, "leftover"), nil, 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -32,7 +28,7 @@ func TestNodeUnpublishReportsWhyTargetPathRemovalFailed(t *testing.T) {
 		})},
 	}
 
-	_, err = ns.NodeUnpublishVolume(context.Background(), &csi.NodeUnpublishVolumeRequest{
+	_, err := ns.NodeUnpublishVolume(context.Background(), &csi.NodeUnpublishVolumeRequest{
 		VolumeId:   "vol-1",
 		TargetPath: targetPath,
 	})

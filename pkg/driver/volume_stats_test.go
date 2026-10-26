@@ -2,6 +2,7 @@ package driver
 
 import (
 	"context"
+	"path/filepath"
 	"testing"
 
 	"github.com/container-storage-interface/spec/lib/go/csi"
@@ -23,6 +24,17 @@ func statsNodeServer(mountPoints ...string) *nodeServer {
 	}
 }
 
+// mountTempDir is a temp dir with symlinks resolved: the fake mounter matches
+// mount points by real path, and on macOS the temp dir sits behind /var.
+func mountTempDir(t *testing.T) string {
+	t.Helper()
+	dir, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	return dir
+}
+
 func usageOf(resp *csi.NodeGetVolumeStatsResponse, unit csi.VolumeUsage_Unit) *csi.VolumeUsage {
 	for _, u := range resp.GetUsage() {
 		if u.GetUnit() == unit {
@@ -33,7 +45,7 @@ func usageOf(resp *csi.NodeGetVolumeStatsResponse, unit csi.VolumeUsage_Unit) *c
 }
 
 func TestNodeGetVolumeStatsReadsTheMountWithoutTheDSM(t *testing.T) {
-	volumePath := t.TempDir()
+	volumePath := mountTempDir(t)
 	ns := statsNodeServer(volumePath)
 
 	resp, err := ns.NodeGetVolumeStats(context.Background(), &csi.NodeGetVolumeStatsRequest{
