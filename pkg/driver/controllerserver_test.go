@@ -17,7 +17,12 @@ limitations under the License.
 package driver
 
 import (
+	"context"
 	"testing"
+
+	"github.com/container-storage-interface/spec/lib/go/csi"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	"github.com/SynologyOpenSource/synology-csi/pkg/utils"
 )
@@ -42,5 +47,67 @@ func TestIsShareProtocol(t *testing.T) {
 				t.Errorf("isShareProtocol(%q) = %v, want %v", tt.protocol, got, tt.want)
 			}
 		})
+	}
+}
+
+// Several nodes mounting one LUN's local filesystem read-write corrupts it, so
+// ReadWriteMany is only safe on a share or as a raw block device.
+func TestIsUnsafeMultiNodeFilesystem(t *testing.T) {
+	mount := &csi.VolumeCapability_Mount{Mount: &csi.VolumeCapability_MountVolume{}}
+	block := &csi.VolumeCapability_Block{Block: &csi.VolumeCapability_BlockVolume{}}
+	capability := func(mode csi.VolumeCapability_AccessMode_Mode, accessType bool) *csi.VolumeCapability {
+		c := &csi.VolumeCapability{AccessMode: &csi.VolumeCapability_AccessMode{Mode: mode}}
+		if accessType {
+			c.AccessType = mount
+		} else {
+			c.AccessType = block
+		}
+		return c
+	}
+	const isMount, isBlock = true, false
+	rwx := csi.VolumeCapability_AccessMode_MULTI_NODE_MULTI_WRITER
+	rwo := csi.VolumeCapability_AccessMode_SINGLE_NODE_WRITER
+
+	tests := []struct {
+		name     string
+		cap      *csi.VolumeCapability
+		protocol string
+		want     bool
+	}{
+		{"iSCSI RWX filesystem", capability(rwx, isMount), utils.ProtocolIscsi, true},
+		{"NVMe RWX filesystem", capability(rwx, isMount), utils.ProtocolNvme, true},
+		{"iSCSI RWX block", capability(rwx, isBlock), utils.ProtocolIscsi, false},
+		{"iSCSI RWO filesystem", capability(rwo, isMount), utils.ProtocolIscsi, false},
+		{"NFS RWX filesystem", capability(rwx, isMount), utils.ProtocolNfs, false},
+		{"SMB RWX filesystem", capability(rwx, isMount), utils.ProtocolSmb, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := isUnsafeMultiNodeFilesystem(tt.cap, tt.protocol); got != tt.want {
+				t.Errorf("isUnsafeMultiNodeFilesystem() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestCreateVolumeRejectsMultiNodeFilesystemOnIscsi(t *testing.T) {
+	svc := &lookupFailingService{}
+	cs := &controllerServer{Driver: testDriver(), dsmService: svc}
+
+	_, err := cs.CreateVolume(context.Background(), &csi.CreateVolumeRequest{
+		Name:       "pvc-1",
+		Parameters: map[string]string{"protocol": utils.ProtocolIscsi},
+		VolumeCapabilities: []*csi.VolumeCapability{{
+			AccessType: &csi.VolumeCapability_Mount{Mount: &csi.VolumeCapability_MountVolume{FsType: "btrfs"}},
+			AccessMode: &csi.VolumeCapability_AccessMode{Mode: csi.VolumeCapability_AccessMode_MULTI_NODE_MULTI_WRITER},
+		}},
+	})
+
+	if status.Code(err) != codes.InvalidArgument {
+		t.Fatalf("got %v, want InvalidArgument", err)
+	}
+	if svc.createVolumeCalled {
+		t.Error("created a LUN that several nodes would mount read-write")
 	}
 }

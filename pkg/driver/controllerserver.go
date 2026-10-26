@@ -66,6 +66,16 @@ func isShareProtocol(protocol string) bool {
 	return protocol == utils.ProtocolNfs || protocol == utils.ProtocolSmb
 }
 
+// isUnsafeMultiNodeFilesystem reports whether the capability asks for a
+// filesystem that several nodes would mount read-write from one LUN. Local
+// filesystems like btrfs, ext4 and xfs assume a single mounter, so this
+// corrupts them; only a share can serve one filesystem to several nodes.
+func isUnsafeMultiNodeFilesystem(cap *csi.VolumeCapability, protocol string) bool {
+	return cap.GetMount() != nil &&
+		cap.GetAccessMode().GetMode() == csi.VolumeCapability_AccessMode_MULTI_NODE_MULTI_WRITER &&
+		!isShareProtocol(protocol)
+}
+
 func (cs *controllerServer) isVolumeAccessModeSupport(mode csi.VolumeCapability_AccessMode_Mode) bool {
 	for _, accessMode := range cs.Driver.getVolumeCapabilityAccessModes() {
 		if mode == accessMode.Mode {
@@ -149,6 +159,12 @@ func (cs *controllerServer) CreateVolume(ctx context.Context, req *csi.CreateVol
 		if cap.GetBlock() != nil && isShareProtocol(protocol) {
 			return nil, status.Errorf(codes.InvalidArgument,
 				"%s protocol does not support volumeMode: Block; use volumeMode: Filesystem instead",
+				strings.ToUpper(protocol))
+		}
+
+		if isUnsafeMultiNodeFilesystem(cap, protocol) {
+			return nil, status.Errorf(codes.InvalidArgument,
+				"%s protocol does not support ReadWriteMany with volumeMode: Filesystem; use NFS or SMB, or volumeMode: Block",
 				strings.ToUpper(protocol))
 		}
 
@@ -328,6 +344,13 @@ func (cs *controllerServer) ValidateVolumeCapabilities(ctx context.Context, req 
 			return &csi.ValidateVolumeCapabilitiesResponse{
 				Message: fmt.Sprintf(
 					"%s protocol does not support volumeMode: Block; use volumeMode: Filesystem instead",
+					strings.ToUpper(k8sVolume.Protocol)),
+			}, nil
+		}
+		if isUnsafeMultiNodeFilesystem(cap, k8sVolume.Protocol) {
+			return &csi.ValidateVolumeCapabilitiesResponse{
+				Message: fmt.Sprintf(
+					"%s protocol does not support ReadWriteMany with volumeMode: Filesystem; use NFS or SMB, or volumeMode: Block",
 					strings.ToUpper(k8sVolume.Protocol)),
 			}, nil
 		}
