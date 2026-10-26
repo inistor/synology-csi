@@ -9,7 +9,7 @@ import (
 
 	"github.com/cenkalti/backoff/v4"
 
-	"github.com/SynologyOpenSource/synology-csi/pkg/utils"
+	"github.com/inistor/synology-csi/pkg/utils"
 )
 
 // retryShareOp mirrors the retry decision made in shareRequest so it can be

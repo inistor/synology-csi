@@ -31,9 +31,9 @@ import (
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
-	"github.com/SynologyOpenSource/synology-csi/pkg/interfaces"
-	"github.com/SynologyOpenSource/synology-csi/pkg/models"
-	"github.com/SynologyOpenSource/synology-csi/pkg/utils"
+	"github.com/inistor/synology-csi/pkg/interfaces"
+	"github.com/inistor/synology-csi/pkg/models"
+	"github.com/inistor/synology-csi/pkg/utils"
 )
 
 type controllerServer struct {
@@ -625,7 +625,7 @@ func (cs *controllerServer) ControllerExpandVolume(ctx context.Context, req *csi
 	}
 
 	nodeExpansion := false
-	if (k8sVolume.Protocol == utils.ProtocolIscsi || k8sVolume.Protocol == utils.ProtocolNvme) {
+	if k8sVolume.Protocol == utils.ProtocolIscsi || k8sVolume.Protocol == utils.ProtocolNvme {
 		nodeExpansion = true
 	}
 

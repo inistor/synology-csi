@@ -17,18 +17,18 @@ import (
 	"sync"
 	"time"
 
-	"github.com/SynologyOpenSource/synology-csi/pkg/logger"
+	"github.com/inistor/synology-csi/pkg/logger"
 	log "github.com/sirupsen/logrus"
 )
 
 type DSM struct {
-	Ip         string
-	Port       int
-	Username   string
-	Password   string
-	Sid        string
-	Https      bool
-	Controller string
+	Ip                 string
+	Port               int
+	Username           string
+	Password           string
+	Sid                string
+	Https              bool
+	Controller         string
 	TLSCACert          string
 	TLSServerName      string
 	InsecureSkipVerify bool

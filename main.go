@@ -13,11 +13,11 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 
-	"github.com/SynologyOpenSource/synology-csi/pkg/driver"
-	"github.com/SynologyOpenSource/synology-csi/pkg/dsm/common"
-	"github.com/SynologyOpenSource/synology-csi/pkg/dsm/service"
-	"github.com/SynologyOpenSource/synology-csi/pkg/logger"
-	"github.com/SynologyOpenSource/synology-csi/pkg/utils/hostexec"
+	"github.com/inistor/synology-csi/pkg/driver"
+	"github.com/inistor/synology-csi/pkg/dsm/common"
+	"github.com/inistor/synology-csi/pkg/dsm/service"
+	"github.com/inistor/synology-csi/pkg/logger"
+	"github.com/inistor/synology-csi/pkg/utils/hostexec"
 )
 
 var (

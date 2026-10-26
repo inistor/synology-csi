@@ -17,9 +17,9 @@ limitations under the License.
 package driver
 
 import (
-	"github.com/SynologyOpenSource/synology-csi/pkg/interfaces"
-	"github.com/SynologyOpenSource/synology-csi/pkg/utils"
 	"github.com/container-storage-interface/spec/lib/go/csi"
+	"github.com/inistor/synology-csi/pkg/interfaces"
+	"github.com/inistor/synology-csi/pkg/utils"
 	log "github.com/sirupsen/logrus"
 )
 

@@ -1,4 +1,4 @@
-module github.com/SynologyOpenSource/synology-csi
+module github.com/inistor/synology-csi
 
 go 1.27.0
 

@@ -25,7 +25,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/SynologyOpenSource/synology-csi/pkg/utils/hostexec"
+	"github.com/inistor/synology-csi/pkg/utils/hostexec"
 	log "github.com/sirupsen/logrus"
 	utilexec "k8s.io/utils/exec"
 )

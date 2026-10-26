@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/SynologyOpenSource/synology-csi/pkg/dsm/webapi"
-	"github.com/SynologyOpenSource/synology-csi/pkg/models"
+	"github.com/inistor/synology-csi/pkg/dsm/webapi"
+	"github.com/inistor/synology-csi/pkg/models"
 )
 
 // classifyCount mirrors what findSMBorNFSVolume does with a share list: filter

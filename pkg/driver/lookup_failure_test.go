@@ -12,9 +12,9 @@ import (
 	"google.golang.org/grpc/status"
 	"k8s.io/mount-utils"
 
-	"github.com/SynologyOpenSource/synology-csi/pkg/dsm/common"
-	"github.com/SynologyOpenSource/synology-csi/pkg/dsm/webapi"
-	"github.com/SynologyOpenSource/synology-csi/pkg/models"
+	"github.com/inistor/synology-csi/pkg/dsm/common"
+	"github.com/inistor/synology-csi/pkg/dsm/webapi"
+	"github.com/inistor/synology-csi/pkg/models"
 )
 
 // errListIncomplete stands in for the case this file is about: DSM could not be

@@ -12,9 +12,9 @@ import (
 	"google.golang.org/grpc/status"
 	"strings"
 
-	"github.com/SynologyOpenSource/synology-csi/pkg/dsm/webapi"
-	"github.com/SynologyOpenSource/synology-csi/pkg/models"
-	"github.com/SynologyOpenSource/synology-csi/pkg/utils"
+	"github.com/inistor/synology-csi/pkg/dsm/webapi"
+	"github.com/inistor/synology-csi/pkg/models"
+	"github.com/inistor/synology-csi/pkg/utils"
 )
 
 func (service *DsmService) createMappingSubsystem(dsm *webapi.DSM, spec *models.CreateK8sVolumeSpec, namespaceUuid string) (subsystem *webapi.SubsystemInfo, retErr error) {
@@ -158,9 +158,9 @@ func (service *DsmService) createNVMeVolumeByVolume(dsm *webapi.DSM, spec *model
 	}
 
 	namespaceCloneSpec := webapi.NamespaceCloneSpec{
-		Name:         spec.BackendName,
-		SrcUuid:      srcNamespaceInfo.Uuid,
-		Location:     spec.Location,
+		Name:     spec.BackendName,
+		SrcUuid:  srcNamespaceInfo.Uuid,
+		Location: spec.Location,
 	}
 
 	if _, err := dsm.NamespaceClone(namespaceCloneSpec); err != nil {

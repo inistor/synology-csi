@@ -24,7 +24,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	"github.com/SynologyOpenSource/synology-csi/pkg/utils"
+	"github.com/inistor/synology-csi/pkg/utils"
 )
 
 // Share-backed protocols serve files and cannot expose a raw block device;
