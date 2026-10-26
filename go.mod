@@ -1,6 +1,6 @@
 module github.com/SynologyOpenSource/synology-csi
 
-go 1.21
+go 1.23
 
 require (
 	github.com/antonfisher/nested-logrus-formatter v1.3.1
@@ -12,7 +12,7 @@ require (
 	github.com/spf13/cobra v1.1.3
 	golang.org/x/sys v0.13.0
 	google.golang.org/grpc v1.56.3
-	google.golang.org/protobuf v1.30.0
+	google.golang.org/protobuf v1.36.12
 	gopkg.in/yaml.v2 v2.4.0
 	k8s.io/apimachinery v0.19.0
 	k8s.io/client-go v0.19.0
