@@ -310,14 +310,30 @@ func (ns *nodeServer) loginTarget(volumeId string) (paths []string, iqn string, 
 	return paths, iqn, lun, nil
 }
 
-func (ns *nodeServer) logoutTarget(k8sVolume *models.K8sVolumeRespSpec) {
+func (ns *nodeServer) logoutTarget(k8sVolume *models.K8sVolumeRespSpec) error {
 	if k8sVolume == nil {
-		return
+		return nil
 	}
 
 	// Assume target and lun 1-1 mapping
 	mappingIndex := k8sVolume.Target.MappedLuns[0].MappingIndex
 	volumeMountPath := ns.tools.getExistedVolumeMountPath(k8sVolume.Target.Iqn, mappingIndex)
+
+	// Logging out from under a mounted filesystem fails every write after it, and
+	// btrfs answers the first failed write by forcing itself read-only. Unstage
+	// unmounted the staging path, so a mount left now is one the driver doesn't
+	// know about; refuse, so that kubelet retries once it is gone.
+	if volumeMountPath != "" {
+		inUse, err := deviceInUse(volumeMountPath)
+		if inUse {
+			return status.Errorf(codes.FailedPrecondition,
+				"Not logging out of target[%s]: device %s is still in use (mounted at: %s): %v",
+				k8sVolume.Target.Iqn, volumeMountPath, ns.tools.mountsOf(volumeMountPath), err)
+		}
+		if err != nil {
+			log.Warnf("Couldn't check whether device %s is still in use before logout: %v", volumeMountPath, err)
+		}
+	}
 
 	// Push anything still in the page cache out to the LUN before the session
 	// goes away. A filesystem volume was already flushed by the Unmount above,
@@ -349,6 +365,21 @@ func (ns *nodeServer) logoutTarget(k8sVolume *models.K8sVolumeRespSpec) {
 	}
 
 	ns.Initiator.logout(k8sVolume.Target.Iqn, k8sVolume.DsmIp)
+	return nil
+}
+
+// mountsOf lists where the host has a device mounted, for an error message;
+// it says "unknown" rather than fail.
+func (t *tools) mountsOf(devPath string) string {
+	resolved, err := filepath.EvalSymlinks(devPath)
+	if err != nil {
+		resolved = devPath
+	}
+	out, err := t.executor.Command("findmnt", "--raw", "--noheadings", "--output", "TARGET", "--source", resolved).CombinedOutput()
+	if err != nil || len(strings.TrimSpace(string(out))) == 0 {
+		return "unknown"
+	}
+	return strings.Join(strings.Fields(string(out)), ", ")
 }
 
 // XFS refuses to mount a filesystem whose UUID is already in use on the host.
@@ -833,7 +864,9 @@ func (ns *nodeServer) NodeUnstageVolume(ctx context.Context, req *csi.NodeUnstag
 	}
 
 	if k8sVolume.Protocol == utils.ProtocolIscsi {
-		ns.logoutTarget(k8sVolume)
+		if err := ns.logoutTarget(k8sVolume); err != nil {
+			return nil, err
+		}
 	} else if k8sVolume.Protocol == utils.ProtocolNvme {
 		ns.logoutNVMeSubsystem(k8sVolume.Subsystem.Nqn)
 	}
