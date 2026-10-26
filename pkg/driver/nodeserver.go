@@ -43,6 +43,7 @@ import (
 )
 
 type nodeServer struct {
+	csi.UnimplementedNodeServer
 	Driver     *Driver
 	Mounter    *mount.SafeFormatAndMount
 	dsmService interfaces.IDsmService
@@ -294,13 +295,13 @@ func (ns *nodeServer) loginTarget(volumeId string) (paths []string, iqn string, 
 	for _, portal := range portals {
 		if err := ns.Initiator.login(iqn, portal); err != nil {
 			return nil, "", 0, status.Errorf(codes.Internal,
-				fmt.Sprintf("Failed to login with target iqn [%s], err: %v", iqn, err))
+				"Failed to login with target iqn [%s], err: %v", iqn, err)
 		}
 
 		path := fmt.Sprintf("%sip-%s-iscsi-%s-lun-%d", "/dev/disk/by-path/", portal, iqn, lun)
 		if err := waitForDevicePathToExist(path); err != nil {
 			log.Errorf("Can't find device path [%s]: %v", path, err)
-			return nil, "", 0, status.Errorf(codes.Internal, fmt.Sprintf("Can't find device path [%s]: %v", path, err))
+			return nil, "", 0, status.Errorf(codes.Internal, "Can't find device path [%s]: %v", path, err)
 		}
 
 		paths = append(paths, path)
@@ -876,7 +877,7 @@ func (ns *nodeServer) NodePublishVolume(ctx context.Context, req *csi.NodePublis
 					var err error
 					mountPermissionsUint, err = strconv.ParseUint(v, 8, 32)
 					if err != nil {
-						return nil, status.Errorf(codes.InvalidArgument, fmt.Sprintf("invalid mountPermissions %s", v))
+						return nil, status.Errorf(codes.InvalidArgument, "invalid mountPermissions %s", v)
 					}
 				}
 			}
@@ -1013,7 +1014,7 @@ func (ns *nodeServer) NodeUnpublishVolume(ctx context.Context, req *csi.NodeUnpu
 		if os.IsNotExist(err) {
 			return &csi.NodeUnpublishVolumeResponse{}, nil
 		}
-		return nil, status.Errorf(codes.Internal, err.Error())
+		return nil, status.Error(codes.Internal, err.Error())
 	}
 
 	notMount, err := mount.IsNotMountPoint(ns.Mounter.Interface, targetPath)
