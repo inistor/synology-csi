@@ -122,7 +122,7 @@ func (dsm *DSM) LunList() ([]LunInfo, error) {
 		Luns []LunInfo `json:"luns"`
 	}
 
-	resp, err := dsm.sendRequest("", &LunInfos{}, params, "webapi/entry.cgi")
+	resp, err := dsm.sendRequest(&LunInfos{}, params, "webapi/entry.cgi")
 	if err != nil {
 		return nil, errCodeMapping(resp.ErrorCode, err)
 	}
@@ -155,7 +155,7 @@ func (dsm *DSM) LunCreate(spec LunCreateSpec) (string, error) {
 		Uuid string `json:"uuid"`
 	}
 
-	resp, err := dsm.sendRequest("", &LunCreateResp{}, params, "webapi/entry.cgi")
+	resp, err := dsm.sendRequest(&LunCreateResp{}, params, "webapi/entry.cgi")
 	if err != nil {
 		return "", errCodeMapping(resp.ErrorCode, err)
 	}
@@ -176,7 +176,7 @@ func (dsm *DSM) LunUpdate(spec LunUpdateSpec) error {
 	params.Add("uuid", strconv.Quote(spec.Uuid))
 	params.Add("new_size", strconv.FormatInt(int64(spec.NewSize), 10))
 
-	resp, err := dsm.sendRequest("", &struct{}{}, params, "webapi/entry.cgi")
+	resp, err := dsm.sendRequest(&struct{}{}, params, "webapi/entry.cgi")
 	if err != nil {
 		return errCodeMapping(resp.ErrorCode, err)
 	}
@@ -197,7 +197,7 @@ func (dsm *DSM) LunGet(uuid string) (LunInfo, error) {
 	}
 	info := Info{}
 
-	resp, err := dsm.sendRequest("", &info, params, "webapi/entry.cgi")
+	resp, err := dsm.sendRequest(&info, params, "webapi/entry.cgi")
 	if err != nil {
 		return LunInfo{}, errCodeMapping(resp.ErrorCode, err)
 	}
@@ -218,7 +218,7 @@ func (dsm *DSM) LunClone(spec LunCloneSpec) (string, error) {
 		Uuid string `json:"dst_lun_uuid"`
 	}
 
-	resp, err := dsm.sendRequest("", &LunCloneResp{}, params, "webapi/entry.cgi")
+	resp, err := dsm.sendRequest(&LunCloneResp{}, params, "webapi/entry.cgi")
 	if err != nil {
 		return "", errCodeMapping(resp.ErrorCode, err)
 	}
@@ -242,7 +242,7 @@ func (dsm *DSM) TargetList() ([]TargetInfo, error) {
 		Targets []TargetInfo `json:"targets"`
 	}
 
-	resp, err := dsm.sendRequest("", &TargetInfos{}, params, "webapi/entry.cgi")
+	resp, err := dsm.sendRequest(&TargetInfos{}, params, "webapi/entry.cgi")
 	if err != nil {
 		return nil, errCodeMapping(resp.ErrorCode, err)
 	}
@@ -267,7 +267,7 @@ func (dsm *DSM) TargetGet(targetId string) (TargetInfo, error) {
 	}
 	info := Info{}
 
-	resp, err := dsm.sendRequest("", &info, params, "webapi/entry.cgi")
+	resp, err := dsm.sendRequest(&info, params, "webapi/entry.cgi")
 	if err != nil {
 		return TargetInfo{}, errCodeMapping(resp.ErrorCode, err)
 	}
@@ -284,7 +284,7 @@ func (dsm *DSM) TargetSet(targetId string, maxSession int) error {
 	params.Add("target_id", strconv.Quote(targetId))
 	params.Add("max_sessions", strconv.Itoa(maxSession))
 
-	resp, err := dsm.sendRequest("", &struct{}{}, params, "webapi/entry.cgi")
+	resp, err := dsm.sendRequest(&struct{}{}, params, "webapi/entry.cgi")
 	if err != nil {
 		return errCodeMapping(resp.ErrorCode, err)
 	}
@@ -305,7 +305,7 @@ func (dsm *DSM) TargetCreate(spec TargetCreateSpec) (string, error) {
 		TargetId int `json:"target_id"`
 	}
 
-	resp, err := dsm.sendRequest("", &TrgCreateResp{}, params, "webapi/entry.cgi")
+	resp, err := dsm.sendRequest(&TrgCreateResp{}, params, "webapi/entry.cgi")
 	if err != nil {
 		return "", errCodeMapping(resp.ErrorCode, err)
 	}
@@ -330,7 +330,7 @@ func (dsm *DSM) LunMapTarget(targetIds []string, lunUuid string) error {
 		log.Debugln(params)
 	}
 
-	resp, err := dsm.sendRequest("", &struct{}{}, params, "webapi/entry.cgi")
+	resp, err := dsm.sendRequest(&struct{}{}, params, "webapi/entry.cgi")
 	if err != nil {
 		return errCodeMapping(resp.ErrorCode, err)
 	}
@@ -344,7 +344,7 @@ func (dsm *DSM) LunDelete(lunUuid string) error {
 	params.Add("version", "1")
 	params.Add("uuid", strconv.Quote(lunUuid))
 
-	resp, err := dsm.sendRequest("", &struct{}{}, params, "webapi/entry.cgi")
+	resp, err := dsm.sendRequest(&struct{}{}, params, "webapi/entry.cgi")
 	if err != nil {
 		return errCodeMapping(resp.ErrorCode, err)
 	}
@@ -358,7 +358,7 @@ func (dsm *DSM) TargetDelete(targetId string) error {
 	params.Add("version", "1")
 	params.Add("target_id", strconv.Quote(targetId))
 
-	resp, err := dsm.sendRequest("", &struct{}{}, params, "webapi/entry.cgi")
+	resp, err := dsm.sendRequest(&struct{}{}, params, "webapi/entry.cgi")
 	if err != nil {
 		return errCodeMapping(resp.ErrorCode, err)
 	}
@@ -381,7 +381,7 @@ func (dsm *DSM) SnapshotCreate(spec SnapshotCreateSpec) (string, error) {
 		Uuid string `json:"snapshot_uuid"`
 	}
 
-	resp, err := dsm.sendRequest("", &SnapshotCreateResp{}, params, "webapi/entry.cgi")
+	resp, err := dsm.sendRequest(&SnapshotCreateResp{}, params, "webapi/entry.cgi")
 	if err != nil {
 		return "", errCodeMapping(resp.ErrorCode, err)
 	}
@@ -401,7 +401,7 @@ func (dsm *DSM) SnapshotDelete(snapshotUuid string) error {
 	params.Add("version", "1")
 	params.Add("snapshot_uuid", strconv.Quote(snapshotUuid))
 
-	resp, err := dsm.sendRequest("", &struct{}{}, params, "webapi/entry.cgi")
+	resp, err := dsm.sendRequest(&struct{}{}, params, "webapi/entry.cgi")
 	if err != nil {
 		return errCodeMapping(resp.ErrorCode, err)
 	}
@@ -420,7 +420,7 @@ func (dsm *DSM) SnapshotGet(snapshotUuid string) (SnapshotInfo, error) {
 	}
 	info := Info{}
 
-	resp, err := dsm.sendRequest("", &info, params, "webapi/entry.cgi")
+	resp, err := dsm.sendRequest(&info, params, "webapi/entry.cgi")
 	if err != nil {
 		return SnapshotInfo{}, errCodeMapping(resp.ErrorCode, err)
 	}
@@ -439,7 +439,7 @@ func (dsm *DSM) SnapshotList(lunUuid string) ([]SnapshotInfo, error) {
 		Snapshots []SnapshotInfo `json:"snapshots"`
 	}
 
-	resp, err := dsm.sendRequest("", &Infos{}, params, "webapi/entry.cgi")
+	resp, err := dsm.sendRequest(&Infos{}, params, "webapi/entry.cgi")
 	if err != nil {
 		return nil, errCodeMapping(resp.ErrorCode, err)
 	}
@@ -465,7 +465,7 @@ func (dsm *DSM) SnapshotClone(spec SnapshotCloneSpec) (string, error) {
 		Uuid string `json:"cloned_lun_uuid"`
 	}
 
-	resp, err := dsm.sendRequest("", &SnapshotCloneResp{}, params, "webapi/entry.cgi")
+	resp, err := dsm.sendRequest(&SnapshotCloneResp{}, params, "webapi/entry.cgi")
 	if err != nil {
 		return "", errCodeMapping(resp.ErrorCode, err)
 	}

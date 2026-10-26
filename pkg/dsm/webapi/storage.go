@@ -32,7 +32,7 @@ func (dsm *DSM) VolumeList() ([]VolInfo, error) {
 		Vols []VolInfo `json:"volumes"`
 	}
 
-	resp, err := dsm.sendRequest("", &VolInfos{}, params, "webapi/entry.cgi")
+	resp, err := dsm.sendRequest(&VolInfos{}, params, "webapi/entry.cgi")
 	if err != nil {
 		return nil, err
 	}
@@ -57,7 +57,7 @@ func (dsm *DSM) VolumeGet(name string) (VolInfo, error) {
 	}
 	info := Info{}
 
-	_, err := dsm.sendRequest("", &info, params, "webapi/entry.cgi")
+	_, err := dsm.sendRequest(&info, params, "webapi/entry.cgi")
 	if err != nil {
 		return VolInfo{}, err
 	}

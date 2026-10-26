@@ -105,7 +105,7 @@ func (dsm *DSM) shareRequest(apiTemplate interface{}, params url.Values) (Respon
 
 	err := backoff.Retry(func() error {
 		var reqErr error
-		resp, reqErr = dsm.sendRequest("", apiTemplate, params, "webapi/entry.cgi")
+		resp, reqErr = dsm.sendRequest(apiTemplate, params, "webapi/entry.cgi")
 		mapped := shareErrCodeMapping(resp.ErrorCode, reqErr)
 		if mapped == nil {
 			return nil
@@ -143,7 +143,7 @@ func (dsm *DSM) nfsPrivilegeRequest(apiTemplate interface{}, params url.Values, 
 
 	err := backoff.Retry(func() error {
 		var reqErr error
-		resp, reqErr = dsm.sendRequest("", apiTemplate, params, "webapi/entry.cgi")
+		resp, reqErr = dsm.sendRequest(apiTemplate, params, "webapi/entry.cgi")
 		if reqErr == nil {
 			return nil
 		}
@@ -596,7 +596,7 @@ func (dsm *DSM) NfsGet() (NfsInfo, error) {
 
 	info := NfsInfo{}
 	// SYNO.Core.FileServ.NFS namespace: share error codes do not apply.
-	_, err := dsm.sendRequest("", &info, params, "webapi/entry.cgi")
+	_, err := dsm.sendRequest(&info, params, "webapi/entry.cgi")
 	if err != nil {
 		return NfsInfo{}, err
 	}
@@ -615,7 +615,7 @@ func (dsm *DSM) NfsSet(enableV3 bool, enableV4 bool, enabledMinorVer int) error 
 	params.Add("enabled_minor_ver", strconv.Itoa(enabledMinorVer))
 
 	// SYNO.Core.FileServ.NFS namespace: share error codes do not apply.
-	_, err := dsm.sendRequest("", &struct{}{}, params, "webapi/entry.cgi")
+	_, err := dsm.sendRequest(&struct{}{}, params, "webapi/entry.cgi")
 	if err != nil {
 		return err
 	}

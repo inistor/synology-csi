@@ -31,7 +31,8 @@ type privilegeDSM struct {
 }
 
 func (f *privilegeDSM) handler(w http.ResponseWriter, r *http.Request) {
-	q := r.URL.Query()
+	r.ParseForm()
+	q := r.PostForm
 	w.Header().Set("Content-Type", "application/json")
 
 	if strings.Contains(r.URL.Path, "auth.cgi") {

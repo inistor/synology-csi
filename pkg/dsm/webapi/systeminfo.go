@@ -59,7 +59,7 @@ func (dsm *DSM) DsmSystemInfoGet(infoType string) (*DsmSysInfo, error) {
 		params.Add("type", infoType)
 	}
 
-	resp, err := dsm.sendRequest("", &DsmSysInfo{}, params, "webapi/entry.cgi")
+	resp, err := dsm.sendRequest(&DsmSysInfo{}, params, "webapi/entry.cgi")
 	if err != nil {
 		return nil, err
 	}
@@ -85,7 +85,7 @@ func (dsm *DSM) NetworkInterfaceList(relayNode string) ([]NetworkInterface, erro
 	ifaces := []NetworkInterface{}
 	validIfaces := []NetworkInterface{}
 
-	_, err := dsm.sendRequest("", &ifaces, params, "webapi/entry.cgi")
+	_, err := dsm.sendRequest(&ifaces, params, "webapi/entry.cgi")
 	if err != nil {
 		return nil, err
 	}

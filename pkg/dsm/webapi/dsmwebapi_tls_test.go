@@ -142,8 +142,8 @@ func TestHTTPS_DefaultRejectsUntrustedCert(t *testing.T) {
 func TestHTTPS_InsecureSkipVerify_ConnectsAndSendsCredentials(t *testing.T) {
 	var gotAccount, gotPasswd string
 	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		gotAccount = r.URL.Query().Get("account")
-		gotPasswd = r.URL.Query().Get("passwd")
+		gotAccount = r.PostFormValue("account")
+		gotPasswd = r.PostFormValue("passwd")
 		fakeDSMHandler(w, r)
 	}))
 	defer server.Close()

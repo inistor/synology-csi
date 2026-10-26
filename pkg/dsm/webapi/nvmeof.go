@@ -98,7 +98,7 @@ func (dsm *DSM) NamespaceCreate(spec NamespaceCreateSpec) (string, error) {
 		Uuid string `json:"uuid"`
 	}
 
-	resp, err := dsm.sendRequest("", &NamespaceCreateResp{}, params, "webapi/entry.cgi")
+	resp, err := dsm.sendRequest(&NamespaceCreateResp{}, params, "webapi/entry.cgi")
 	if err != nil {
 		return "", sanErrCodeMapping(resp.ErrorCode, err)
 	}
@@ -124,7 +124,7 @@ func (dsm *DSM) NamespaceClone(spec NamespaceCloneSpec) (string, error) {
 		Uuid string `json:"dst_namespace_uuid"`
 	}
 
-	resp, err := dsm.sendRequest("", &NamespaceCloneResp{}, params, "webapi/entry.cgi")
+	resp, err := dsm.sendRequest(&NamespaceCloneResp{}, params, "webapi/entry.cgi")
 	if err != nil {
 		return "", sanErrCodeMapping(resp.ErrorCode, err)
 	}
@@ -148,7 +148,7 @@ func (dsm *DSM) NamespaceSet(spec NamespaceSetSpec) error {
 		params.Add("new_size", strconv.FormatInt(int64(spec.NewSize), 10))
 	}
 
-	resp, err := dsm.sendRequest("", &struct{}{}, params, "webapi/entry.cgi")
+	resp, err := dsm.sendRequest(&struct{}{}, params, "webapi/entry.cgi")
 
 	return sanErrCodeMapping(resp.ErrorCode, err)
 }
@@ -161,7 +161,7 @@ func (dsm *DSM) NamespaceDelete(uuid string) error {
 	params.Add("uuid", strconv.Quote(uuid))
 	params.Add("is_soft_feas_ignored", strconv.FormatBool(true))
 
-	resp, err := dsm.sendRequest("", &struct{}{}, params, "webapi/entry.cgi")
+	resp, err := dsm.sendRequest(&struct{}{}, params, "webapi/entry.cgi")
 
 	return sanErrCodeMapping(resp.ErrorCode, err)
 }
@@ -177,7 +177,7 @@ func (dsm *DSM) NamespaceGet(uuidOrName string) (*NamespaceInfo, error) {
 		Namespace NamespaceInfo `json:"namespace"`
 	}
 
-	resp, err := dsm.sendRequest("", &NamespaceGetResp{}, params, "webapi/entry.cgi")
+	resp, err := dsm.sendRequest(&NamespaceGetResp{}, params, "webapi/entry.cgi")
 	if err != nil {
 		return nil, sanErrCodeMapping(resp.ErrorCode, err)
 	}
@@ -199,7 +199,7 @@ func (dsm *DSM) NamespaceList() ([]NamespaceInfo, error) {
 		Namespaces []NamespaceInfo `json:"namespaces"`
 	}
 
-	resp, err := dsm.sendRequest("", &NamespaceInfos{}, params, "webapi/entry.cgi")
+	resp, err := dsm.sendRequest(&NamespaceInfos{}, params, "webapi/entry.cgi")
 	if err != nil {
 		return nil, sanErrCodeMapping(resp.ErrorCode, err)
 	}
@@ -223,7 +223,7 @@ func (dsm *DSM) NamespaceSnapshotList(srcUuid string) ([]SnapshotInfo, error) {
 		Snapshots []SnapshotInfo `json:"snapshots"`
 	}
 
-	resp, err := dsm.sendRequest("", &Infos{}, params, "webapi/entry.cgi")
+	resp, err := dsm.sendRequest(&Infos{}, params, "webapi/entry.cgi")
 	if err != nil {
 		return nil, sanErrCodeMapping(resp.ErrorCode, err)
 	}
@@ -248,7 +248,7 @@ func (dsm *DSM) NamespaceSnapshotGet(snapshotUuid string) (*SnapshotInfo, error)
 	}
 	info := Info{}
 
-	resp, err := dsm.sendRequest("", &info, params, "webapi/entry.cgi")
+	resp, err := dsm.sendRequest(&info, params, "webapi/entry.cgi")
 	if err != nil {
 		return nil, sanErrCodeMapping(resp.ErrorCode, err)
 	}
@@ -272,7 +272,7 @@ func (dsm *DSM) NamespaceSnapshotCreate(spec SnapshotCreateSpec) (string, error)
 		Uuid string `json:"snapshot_uuid"`
 	}
 
-	resp, err := dsm.sendRequest("", &SnapshotCreateResp{}, params, "webapi/entry.cgi")
+	resp, err := dsm.sendRequest(&SnapshotCreateResp{}, params, "webapi/entry.cgi")
 	if err != nil {
 		return "", sanErrCodeMapping(resp.ErrorCode, err)
 	}
@@ -297,7 +297,7 @@ func (dsm *DSM) NamespaceSnapshotClone(spec SnapshotCloneSpec) (string, error) {
 		Uuid string `json:"cloned_namespace_uuid"`
 	}
 
-	resp, err := dsm.sendRequest("", &SnapshotCloneResp{}, params, "webapi/entry.cgi")
+	resp, err := dsm.sendRequest(&SnapshotCloneResp{}, params, "webapi/entry.cgi")
 	if err != nil {
 		return "", sanErrCodeMapping(resp.ErrorCode, err)
 	}
@@ -317,7 +317,7 @@ func (dsm *DSM) NamespaceSnapshotDelete(snapshotUuid string) error {
 	params.Add("version", "1")
 	params.Add("snapshot_uuid", strconv.Quote(snapshotUuid))
 
-	resp, err := dsm.sendRequest("", &struct{}{}, params, "webapi/entry.cgi")
+	resp, err := dsm.sendRequest(&struct{}{}, params, "webapi/entry.cgi")
 
 	return sanErrCodeMapping(resp.ErrorCode, err)
 }
@@ -335,7 +335,7 @@ func (dsm *DSM) SubsystemCreate(spec SubsystemCreateSpec) (string, error) {
 		SubsystemUuid string `json:"uuid"`
 	}
 
-	resp, err := dsm.sendRequest("", &SubsystemCreateResp{}, params, "webapi/entry.cgi")
+	resp, err := dsm.sendRequest(&SubsystemCreateResp{}, params, "webapi/entry.cgi")
 	if err != nil {
 		return "", sanErrCodeMapping(resp.ErrorCode, err)
 	}
@@ -359,7 +359,7 @@ func (dsm *DSM) SubsystemGet(uuid string) (*SubsystemInfo, error) {
 		Subsystem SubsystemInfo `json:"subsystem"`
 	}
 
-	resp, err := dsm.sendRequest("", &SubsystemGetResp{}, params, "webapi/entry.cgi")
+	resp, err := dsm.sendRequest(&SubsystemGetResp{}, params, "webapi/entry.cgi")
 	if err != nil {
 		return nil, sanErrCodeMapping(resp.ErrorCode, err)
 	}
@@ -378,7 +378,7 @@ func (dsm *DSM) SubsystemDelete(uuid string) error {
 	params.Add("version", "1")
 	params.Add("uuid", strconv.Quote(uuid))
 
-	resp, err := dsm.sendRequest("", &struct{}{}, params, "webapi/entry.cgi")
+	resp, err := dsm.sendRequest(&struct{}{}, params, "webapi/entry.cgi")
 
 	return sanErrCodeMapping(resp.ErrorCode, err)
 }
@@ -396,7 +396,7 @@ func (dsm *DSM) SubsystemSetNamespaces(uuid string, namespaceUuids []string) err
 	}
 	params.Add("namespace_uuids", string(js))
 
-	resp, err := dsm.sendRequest("", &struct{}{}, params, "webapi/entry.cgi")
+	resp, err := dsm.sendRequest(&struct{}{}, params, "webapi/entry.cgi")
 
 	return sanErrCodeMapping(resp.ErrorCode, err)
 }

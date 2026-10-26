@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"net/url"
 	"regexp"
+	"strings"
 	"sync"
 	"time"
 
@@ -108,21 +109,21 @@ func (dsm *DSM) httpClient() (*http.Client, error) {
 	return dsm.client, dsm.clientErr
 }
 
-func (dsm *DSM) sendRequest(data string, apiTemplate interface{}, params url.Values, cgiPath string) (Response, error) {
-	resp, err := dsm.sendRequestWithoutConnectionCheck(data, apiTemplate, params, cgiPath)
+func (dsm *DSM) sendRequest(apiTemplate interface{}, params url.Values, cgiPath string) (Response, error) {
+	resp, err := dsm.sendRequestWithoutConnectionCheck(apiTemplate, params, cgiPath)
 	if err != nil && (resp.ErrorCode == 105 || resp.ErrorCode == 106 || resp.ErrorCode == 119) { // 105: WEBAPI_ERR_NO_PERMISSION, 106: session timeout, 119: WEBAPI_ERR_SID_NOT_FOUND
 		// Re-login
 		if err := dsm.Login(); err != nil {
 			return Response{}, fmt.Errorf("Failed to re-login to DSM: [%s]. err: %v", dsm.Ip, err)
 		}
 		log.Info("Re-login succeeded.")
-		return dsm.sendRequestWithoutConnectionCheck(data, apiTemplate, params, cgiPath)
+		return dsm.sendRequestWithoutConnectionCheck(apiTemplate, params, cgiPath)
 	}
 
 	return resp, err
 }
 
-func (dsm *DSM) sendRequestWithoutConnectionCheck(data string, apiTemplate interface{}, params url.Values, cgiPath string) (Response, error) {
+func (dsm *DSM) sendRequestWithoutConnectionCheck(apiTemplate interface{}, params url.Values, cgiPath string) (Response, error) {
 	client, err := dsm.httpClient()
 	if err != nil {
 		return Response{}, err
@@ -138,22 +139,19 @@ func (dsm *DSM) sendRequestWithoutConnectionCheck(data string, apiTemplate inter
 		cgiUrl = fmt.Sprintf("http://%s:%d/%s", dsm.Ip, dsm.Port, cgiPath)
 	}
 
-	baseUrl, err := url.Parse(cgiUrl)
+	// Parameters go in a POST body, never the URL: they include the login
+	// password, and URLs end up in web server and proxy logs.
+	body := params.Encode()
+
+	if logger.WebapiDebug {
+		log.Debugln(redactedParams(params))
+	}
+
+	req, err = http.NewRequest(http.MethodPost, cgiUrl, strings.NewReader(body))
 	if err != nil {
 		return Response{}, err
 	}
-
-	baseUrl.RawQuery = params.Encode()
-
-	if logger.WebapiDebug {
-		log.Debugln(baseUrl.RawQuery)
-	}
-
-	if data != "" {
-		req, err = http.NewRequest("POST", baseUrl.String(), nil)
-	} else {
-		req, err = http.NewRequest("GET", baseUrl.String(), nil)
-	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 
 	if dsm.Sid != "" {
 		cookie := http.Cookie{Name: "id", Value: dsm.Sid}
@@ -242,7 +240,7 @@ func (dsm *DSM) Login() error {
 		Sid string `json:"sid"`
 	}
 
-	resp, err := dsm.sendRequestWithoutConnectionCheck("", &LoginResp{}, params, "webapi/auth.cgi")
+	resp, err := dsm.sendRequestWithoutConnectionCheck(&LoginResp{}, params, "webapi/auth.cgi")
 	if err != nil {
 		r, _ := regexp.Compile("passwd=.*&")
 		temp := r.ReplaceAllString(err.Error(), "")
@@ -266,11 +264,25 @@ func (dsm *DSM) Logout() error {
 	params.Add("method", "logout")
 	params.Add("version", "1")
 
-	_, err := dsm.sendRequestWithoutConnectionCheck("", &struct{}{}, params, "webapi/entry.cgi")
+	_, err := dsm.sendRequestWithoutConnectionCheck(&struct{}{}, params, "webapi/entry.cgi")
 	if err != nil {
 		return err
 	}
 	dsm.Sid = ""
 
 	return nil
+}
+
+// redactedParams encodes request parameters for a debug log, with secrets hidden.
+func redactedParams(params url.Values) string {
+	redacted := url.Values{}
+	for key, values := range params {
+		switch key {
+		case "passwd", "password", "mutual_password", "_sid":
+			redacted[key] = []string{"REDACTED"}
+		default:
+			redacted[key] = values
+		}
+	}
+	return redacted.Encode()
 }
