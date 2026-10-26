@@ -1009,7 +1009,9 @@ func (ns *nodeServer) NodeUnpublishVolume(ctx context.Context, req *csi.NodeUnpu
 	}
 
 	if err := os.Remove(targetPath); err != nil {
-		return nil, status.Errorf(codes.Internal, "Failed to remove target path.")
+		// Keep the errno: EBUSY (still mounted) and ENOTEMPTY (files left
+		// behind) are different bugs.
+		return nil, status.Errorf(codes.Internal, "Failed to remove target path: %v", err)
 	}
 
 	return &csi.NodeUnpublishVolumeResponse{}, nil
