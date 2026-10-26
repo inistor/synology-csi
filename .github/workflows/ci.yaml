@@ -7,6 +7,9 @@ on:
       - '**/*.go'
       - 'Dockerfile'
       - 'Makefile'
+    # Path filters are not evaluated for tag pushes, so every v* tag releases.
+    tags:
+      - 'v*'
   pull_request:
     paths:
       - '.github/workflows/ci.yaml'
@@ -14,6 +17,10 @@ on:
       - '**/*.go'
       - 'Dockerfile'
       - 'Makefile'
+
+env:
+  IMAGE: ghcr.io/${{ github.repository }}
+  CHART_REPO: oci://ghcr.io/${{ github.repository_owner }}/charts
 
 jobs:
   build:
@@ -24,12 +31,85 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v6.0.1
+        uses: actions/checkout@v7.0.1
 
       - name: Set up Go
-        uses: actions/setup-go@v6.1.0
+        uses: actions/setup-go@v7.0.0
         with:
           go-version-file: 'go.mod'
 
       - name: Build binary
         run: make build
+
+      # test/sanity needs a live DSM, so only the unit tests run here.
+      - name: Unit tests
+        run: go test ./pkg/...
+
+  image:
+    needs: build
+    if: github.event_name == 'push'
+    runs-on: ubuntu-24.04
+
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7.0.1
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v4.4.0
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v4.4.1
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v4.7.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Release tags keep their "v" prefix, matching the chart's appVersion.
+      - name: Image metadata
+        id: meta
+        uses: docker/metadata-action@v6.2.0
+        with:
+          images: ${{ env.IMAGE }}
+          tags: |
+            type=ref,event=branch
+            type=ref,event=tag
+            type=sha
+
+      - name: Build and push
+        uses: docker/build-push-action@v7.4.0
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64,linux/arm/v7
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+
+  chart:
+    needs: image
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-24.04
+
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7.0.1
+
+      # Helm is preinstalled on GitHub-hosted runners.
+      - name: Package and push chart
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          helm package deploy/helm --version "$version" --app-version "$GITHUB_REF_NAME"
+          echo "$GITHUB_TOKEN" | helm registry login ghcr.io -u "${{ github.actor }}" --password-stdin
+          helm push "synology-csi-${version}.tgz" "$CHART_REPO"
