@@ -6,7 +6,7 @@ apiVersion: snapshot.storage.k8s.io/v1
 {{- with .deletionPolicy }}
 deletionPolicy: {{ . }}
 {{- end }}
-driver: csi.san.synology.com
+driver: {{ $.Values.driverName }}
 kind: VolumeSnapshotClass
 metadata:
   annotations:

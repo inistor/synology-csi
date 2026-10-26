@@ -15,7 +15,7 @@ mountOptions: {{- toYaml . | nindent 2 }}
 {{- with .parameters }}
 parameters: {{- toYaml . | nindent 2 }}
 {{- end }}
-provisioner: csi.san.synology.com
+provisioner: {{ $.Values.driverName }}
 {{- with .reclaimPolicy }}
 reclaimPolicy: {{ . }}
 {{- end }}

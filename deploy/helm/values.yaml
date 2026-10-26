@@ -55,6 +55,11 @@ images:
     image: registry.k8s.io/sig-storage/csi-snapshotter
     pullPolicy: IfNotPresent
     tag: v8.7.0
+# The CSI driver name, used by StorageClasses, VolumeSnapshotClasses and PVs to
+# pick this driver. Keep the default to take over volumes created by upstream's
+# driver; set another to run a second copy beside it (it then serves only its
+# own StorageClasses and volumes). A PV's driver name never changes.
+driverName: csi.san.synology.com
 installCSIDriver: true
 nameOverride: ""
 # Affinity, nodeSelector, tolerations and resources for the node DaemonSet.

@@ -4,7 +4,7 @@ apiVersion: storage.k8s.io/v1
 kind: CSIDriver
 metadata:
   labels: {{- include "synology-csi.labels" $ | nindent 4 }}
-  name: csi.san.synology.com
+  name: {{ $.Values.driverName }}
 spec:
   # The driver implements no ControllerPublishVolume, so attaching is a no-op,
   # but the VolumeAttachment it creates is what stops Kubernetes from attaching

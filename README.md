@@ -106,6 +106,36 @@ existing upstream release. Before upgrading:
 
 Uninstall with `helm uninstall`, but only once nothing uses volumes from this driver.
 
+### Running a second copy beside an existing driver
+
+To try a build next to a driver that must keep running, install it as another release with its own
+`driverName`, and give its StorageClasses and VolumeSnapshotClasses names the existing driver doesn't use:
+
+```yaml
+driverName: csi.synology.example.dev   # anything but csi.san.synology.com
+storageClasses:
+  synology-iscsi-storage:
+    disabled: true                     # the existing driver's class keeps this name
+  synology-iscsi-trial:
+    reclaimPolicy: Delete
+    parameters:
+      fsType: btrfs
+volumeSnapshotClasses:
+  synology-snapshotclass:
+    disabled: true
+  synology-snapshotclass-trial:
+    deletionPolicy: Delete
+```
+
+```sh
+helm install synology-csi-trial deploy/helm --namespace synology-csi-trial --values trial-values.yaml
+```
+
+Each copy then serves only the PVs and classes that name it, with its own kubelet socket. Both see every
+`k8s-csi-*` LUN and target on a shared DSM, and both count against its iSCSI target limit. Existing volumes stay
+with the driver that created them: a PV's driver name cannot change, so moving them to this fork means upgrading
+the existing release in place under `csi.san.synology.com`.
+
 ## Configuration
 
 ### Connecting to DSM

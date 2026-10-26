@@ -71,7 +71,7 @@ spec:
                 fieldRef:
                   fieldPath: spec.nodeName
             - name: REGISTRATION_PATH
-              value: {{ $.Values.node.kubeletPath }}/plugins/csi.san.synology.com/csi.sock
+              value: {{ $.Values.node.kubeletPath }}/plugins/{{ $.Values.driverName }}/csi.sock
           {{- with .nodeDriverRegistrar }}
           image: {{ .image }}:{{ .tag }}
           imagePullPolicy: {{ .pullPolicy }}
@@ -90,6 +90,7 @@ spec:
             - --endpoint=$(CSI_ENDPOINT)
             - --log-level=info
             - --nodeid=$(KUBE_NODE_NAME)
+            - --driver-name={{ $.Values.driverName }}
             {{- if $.Values.node.supportChrootDir }}
             - --chroot-dir=/host
             {{- end }}
@@ -157,7 +158,7 @@ spec:
             type: Directory
         - name: plugin-dir
           hostPath:
-            path: {{ .kubeletPath }}/plugins/csi.san.synology.com
+            path: {{ .kubeletPath }}/plugins/{{ $.Values.driverName }}
             type: DirectoryOrCreate
         - name: registration-dir
           hostPath:
