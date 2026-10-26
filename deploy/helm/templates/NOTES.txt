@@ -1,14 +1,17 @@
-Thank you for installing {{ .Chart.Name }}.
+{{ .Chart.Name }} {{ .Chart.AppVersion }} is installed as release {{ .Release.Name }} in namespace {{ .Release.Namespace }}.
+{{- if not .Values.clientInfoSecret.create }}
 
-Your release is named {{ .Release.Name }}.
+The driver reads DSM connection details from the Secret
+"{{ .Values.clientInfoSecret.name | default (include "synology-csi.fullname" . | printf "%s-client-info") }}" (key client-info.yml),
+which you create yourself. Until it exists, the driver's pods will not start.
+{{- end }}
+{{- if .Values.snapshotter.enabled }}
 
-To learn more about the release, try:
+Snapshots need the external-snapshotter CRDs and snapshot-controller in the cluster.
+{{- end }}
 
-    helm status {{ .Release.Name }} --namespace {{ .Release.Namespace }}
+Check the release with:
 
-or
+    helm test {{ .Release.Name }} --namespace {{ .Release.Namespace }}
 
-    helm get all {{ .Release.Name }} --namespace {{ .Release.Namespace }}
-
-If you want to help to improve this chart, please submit an issue or fork this repo and send a pull request to
-{{ .Chart.Home }}.
+Documentation and issues: {{ .Chart.Home }}

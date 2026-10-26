@@ -7,6 +7,8 @@ metadata:
   name: {{ include "synology-csi.fullname" $ }}-controller
 
 ---
+# The union of what the sidecars in the controller pod need, following each
+# sidecar's upstream deploy/kubernetes/rbac.yaml.
 kind: ClusterRole
 apiVersion: rbac.authorization.k8s.io/v1
 metadata:
@@ -15,40 +17,40 @@ metadata:
 rules:
   - apiGroups: [ "" ]
     resources: [ "events" ]
-    verbs: [ "get", "list", "watch", "create", "update", "patch" ]
-  - apiGroups: [ "" ]
-    resources: [ "persistentvolumeclaims" ]
-    verbs: [ "get", "list", "watch", "update", "patch" ]
-  - apiGroups: [ "" ]
-    resources: [ "persistentvolumeclaims/status" ]
-    verbs: [ "get", "list", "watch", "update", "patch" ]
+    verbs: [ "list", "watch", "create", "update", "patch" ]
   - apiGroups: [ "" ]
     resources: [ "persistentvolumes" ]
-    verbs: [ "get", "list", "watch", "create", "update", "patch", "delete" ]
+    verbs: [ "get", "list", "watch", "create", "patch", "delete" ]
+  - apiGroups: [ "" ]
+    resources: [ "persistentvolumeclaims" ]
+    verbs: [ "get", "list", "watch", "update" ]
+  - apiGroups: [ "" ]
+    resources: [ "persistentvolumeclaims/status" ]
+    verbs: [ "patch" ]
   - apiGroups: [ "" ]
     resources: [ "nodes", "pods" ]
     verbs: [ "get", "list", "watch" ]
   - apiGroups: [ "storage.k8s.io" ]
-    resources: [ "csinodes" ]
-    verbs: [ "get", "list", "watch" ]
-  - apiGroups: [ "csi.storage.k8s.io" ]
-    resources: [ "csinodeinfos" ]
+    resources: [ "storageclasses", "csinodes", "volumeattributesclasses" ]
     verbs: [ "get", "list", "watch" ]
   - apiGroups: [ "storage.k8s.io" ]
-    resources: [ "volumeattachments", "volumeattachments/status" ]
-    verbs: [ "get", "list", "watch", "update", "patch" ]
+    resources: [ "volumeattachments" ]
+    verbs: [ "get", "list", "watch", "patch" ]
   - apiGroups: [ "storage.k8s.io" ]
-    resources: [ "storageclasses" ]
-    verbs: [ "get", "list", "watch" ]
+    resources: [ "volumeattachments/status" ]
+    verbs: [ "patch" ]
   - apiGroups: [ "snapshot.storage.k8s.io" ]
     resources: [ "volumesnapshots" ]
-    verbs: [ "get", "list" ]
+    verbs: [ "get", "list", "watch", "update" ]
+  - apiGroups: [ "snapshot.storage.k8s.io" ]
+    resources: [ "volumesnapshotclasses" ]
+    verbs: [ "get", "list", "watch" ]
   - apiGroups: [ "snapshot.storage.k8s.io" ]
     resources: [ "volumesnapshotcontents" ]
-    verbs: [ "get", "list" ]
-  - apiGroups: [""]
-    resources: [ "secrets" ]
-    verbs: [ "get" ]
+    verbs: [ "get", "list", "watch", "update", "patch" ]
+  - apiGroups: [ "snapshot.storage.k8s.io" ]
+    resources: [ "volumesnapshotcontents/status" ]
+    verbs: [ "update", "patch" ]
 
 ---
 kind: ClusterRoleBinding
@@ -65,9 +67,36 @@ roleRef:
   kind: ClusterRole
   name: {{ include "synology-csi.fullname" $ }}-controller
 
+---
+# Leader election, so a rollout never runs two active controllers.
+kind: Role
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  labels: {{- include "synology-csi.labels" $ | nindent 4 }}
+  name: {{ include "synology-csi.fullname" $ }}-controller
+rules:
+  - apiGroups: [ "coordination.k8s.io" ]
+    resources: [ "leases" ]
+    verbs: [ "get", "list", "watch", "create", "update", "patch", "delete" ]
+
+---
+kind: RoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  labels: {{- include "synology-csi.labels" $ | nindent 4 }}
+  name: {{ include "synology-csi.fullname" $ }}-controller
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "synology-csi.fullname" $ }}-controller
+    namespace: {{ $.Release.Namespace }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ include "synology-csi.fullname" $ }}-controller
+
 {{- with .controller | default (dict "dummy" true) }}
 ---
-kind: StatefulSet
+kind: Deployment
 apiVersion: apps/v1
 metadata:
   labels:
@@ -75,11 +104,13 @@ metadata:
     {{- include "synology-csi.labels" $ | nindent 4 }}
   name: {{ include "synology-csi.fullname" $ }}-controller
 spec:
+  {{- with .replicas }}
+  replicas: {{ . }}
+  {{- end }}
   selector:
     matchLabels:
       app: controller
       {{- include "synology-csi.selectorLabels" $ | nindent 6 }}
-  serviceName: {{ include "synology-csi.fullname" $ }}-controller
   template:
     metadata:
       labels:
@@ -94,8 +125,11 @@ spec:
         - name: csi-provisioner
           args:
             - --csi-address=$(ADDRESS)
+            # Tags each DSM LUN/share with the PVC's namespace and name.
+            - --extra-create-metadata
+            - --leader-election
             - --timeout=120s
-            - --v=5
+            - --v=2
           env:
             - name: ADDRESS
               value: /var/lib/csi/sockets/pluginproxy/csi.sock
@@ -103,18 +137,18 @@ spec:
           image: {{ .image }}:{{ .tag }}
           imagePullPolicy: {{ .pullPolicy }}
           {{- end }}
-          securityContext:
-            allowPrivilegeEscalation: true
-            capabilities:
-              add: [ "SYS_ADMIN" ]
-            privileged: true
+          {{- with $.Values.controller.resources }}
+          resources: {{- toYaml . | nindent 12 }}
+          {{- end }}
+          securityContext: {{- include "synology-csi.restrictedContainer" $ | nindent 12 }}
           volumeMounts:
             - name: socket-dir
               mountPath: /var/lib/csi/sockets/pluginproxy
         - name: csi-attacher
           args:
             - --csi-address=$(ADDRESS)
-            - --v=5
+            - --leader-election
+            - --v=2
           env:
             - name: ADDRESS
               value: /var/lib/csi/sockets/pluginproxy/csi.sock
@@ -122,19 +156,19 @@ spec:
           image: {{ .image }}:{{ .tag }}
           imagePullPolicy: {{ .pullPolicy }}
           {{- end }}
-          securityContext:
-            allowPrivilegeEscalation: true
-            capabilities:
-              add: [ "SYS_ADMIN" ]
-            privileged: true
+          {{- with $.Values.controller.resources }}
+          resources: {{- toYaml . | nindent 12 }}
+          {{- end }}
+          securityContext: {{- include "synology-csi.restrictedContainer" $ | nindent 12 }}
           volumeMounts:
             - name: socket-dir
               mountPath: /var/lib/csi/sockets/pluginproxy
         - name: csi-resizer
           args:
             - --csi-address=$(ADDRESS)
-            - --v=5
+            - --leader-election
             - --timeout=120s
+            - --v=2
           env:
             - name: ADDRESS
               value: /var/lib/csi/sockets/pluginproxy/csi.sock
@@ -142,14 +176,35 @@ spec:
           image: {{ .image }}:{{ .tag }}
           imagePullPolicy: {{ .pullPolicy }}
           {{- end }}
-          securityContext:
-            allowPrivilegeEscalation: true
-            capabilities:
-              add: [ "SYS_ADMIN" ]
-            privileged: true
+          {{- with $.Values.controller.resources }}
+          resources: {{- toYaml . | nindent 12 }}
+          {{- end }}
+          securityContext: {{- include "synology-csi.restrictedContainer" $ | nindent 12 }}
           volumeMounts:
             - name: socket-dir
               mountPath: /var/lib/csi/sockets/pluginproxy
+        {{- if $.Values.snapshotter.enabled }}
+        - name: csi-snapshotter
+          args:
+            - --csi-address=$(ADDRESS)
+            - --leader-election
+            - --timeout=120s
+            - --v=2
+          env:
+            - name: ADDRESS
+              value: /var/lib/csi/sockets/pluginproxy/csi.sock
+          {{- with .snapshotter }}
+          image: {{ .image }}:{{ .tag }}
+          imagePullPolicy: {{ .pullPolicy }}
+          {{- end }}
+          {{- with $.Values.controller.resources }}
+          resources: {{- toYaml . | nindent 12 }}
+          {{- end }}
+          securityContext: {{- include "synology-csi.restrictedContainer" $ | nindent 12 }}
+          volumeMounts:
+            - name: socket-dir
+              mountPath: /var/lib/csi/sockets/pluginproxy
+        {{- end }}
         - name: csi-plugin
           args:
             - --client-info=/etc/synology/client-info.yml
@@ -163,11 +218,10 @@ spec:
           image: {{ .image }}:{{ .tag | default $.Chart.AppVersion }}
           imagePullPolicy: {{ .pullPolicy }}
           {{- end }}
-          securityContext:
-            allowPrivilegeEscalation: true
-            capabilities:
-              add: [ "SYS_ADMIN" ]
-            privileged: true
+          {{- with $.Values.controller.resources }}
+          resources: {{- toYaml . | nindent 12 }}
+          {{- end }}
+          securityContext: {{- include "synology-csi.restrictedContainer" $ | nindent 12 }}
           volumeMounts:
             - name: client-info
               mountPath: /etc/synology
@@ -175,10 +229,18 @@ spec:
             - name: socket-dir
               mountPath: /var/lib/csi/sockets/pluginproxy
       {{- end }}
-      hostNetwork: true
       {{- with .nodeSelector }}
       nodeSelector: {{- toYaml . | nindent 8 }}
       {{- end }}
+      priorityClassName: system-cluster-critical
+      # One user for every container, so the sidecars can connect to the
+      # socket the plugin creates.
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
       serviceAccountName: {{ include "synology-csi.fullname" $ }}-controller
       {{- with .tolerations }}
       tolerations: {{- toYaml . | nindent 8 }}

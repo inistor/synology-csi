@@ -7,6 +7,7 @@ metadata:
   name: {{ include "synology-csi.fullname" $ }}-node
 
 ---
+# The node plugin only lists nodes, for the IPs an NFS share must allow.
 kind: ClusterRole
 apiVersion: rbac.authorization.k8s.io/v1
 metadata:
@@ -14,20 +15,8 @@ metadata:
   name: {{ include "synology-csi.fullname" $ }}-node
 rules:
   - apiGroups: [ "" ]
-    resources: [ "secrets" ]
-    verbs: [ "get", "list" ]
-  - apiGroups: [ "" ]
     resources: [ "nodes" ]
-    verbs: [ "get", "list", "update" ]
-  - apiGroups: [ "" ]
-    resources: [ "namespaces" ]
     verbs: [ "get", "list" ]
-  - apiGroups: [ "" ]
-    resources: [ "persistentvolumes" ]
-    verbs: [ "get", "list", "watch", "update" ]
-  - apiGroups: [ "storage.k8s.io" ]
-    resources: [ "volumeattachments" ]
-    verbs: [ "get", "list", "watch", "update" ]
 
 ---
 kind: ClusterRoleBinding
@@ -73,7 +62,7 @@ spec:
           args:
             - --csi-address=$(ADDRESS)
             - --kubelet-registration-path=$(REGISTRATION_PATH)
-            - --v=5
+            - --v=2
           env:
             - name: ADDRESS
               value: /csi/csi.sock
@@ -87,8 +76,9 @@ spec:
           image: {{ .image }}:{{ .tag }}
           imagePullPolicy: {{ .pullPolicy }}
           {{- end }}
-          securityContext:
-            privileged: true
+          {{- with $.Values.node.resources }}
+          resources: {{- toYaml . | nindent 12 }}
+          {{- end }}
           volumeMounts:
             - name: plugin-dir
               mountPath: /csi
@@ -100,11 +90,11 @@ spec:
             - --endpoint=$(CSI_ENDPOINT)
             - --log-level=info
             - --nodeid=$(KUBE_NODE_NAME)
-            {{- if .plugin.supportChrootDir }}
+            {{- if $.Values.node.supportChrootDir }}
             - --chroot-dir=/host
             {{- end }}
             {{- with $.Values.node.extraArgs }}
-            {{ toYaml . }}
+            {{- toYaml . | nindent 12 }}
             {{- end }}
           env:
             - name: CSI_ENDPOINT
@@ -117,12 +107,14 @@ spec:
           image: {{ .image }}:{{ .tag | default $.Chart.AppVersion }}
           imagePullPolicy: {{ .pullPolicy }}
           {{- end }}
+          {{- with $.Values.node.resources }}
+          resources: {{- toYaml . | nindent 12 }}
+          {{- end }}
+          # Logging in to iSCSI targets, formatting and mounting on the host
+          # need root and full device access. The image runs as a non-root
+          # user by default, and privileged alone does not change that.
           securityContext:
             privileged: true
-            # The image declares USER 1000 (container certification's
-            # RunAsNonRoot check); the node plugin genuinely needs root for
-            # mount/format and chroot into the host, so override it here.
-            # privileged alone does not change the runtime user.
             runAsUser: 0
           volumeMounts:
             - name: client-info
@@ -138,10 +130,13 @@ spec:
             - name: plugin-dir
               mountPath: /csi
       {{- end }}
+      # The host's iscsid sessions and the node IP an NFS share allows both
+      # belong to the host network.
       hostNetwork: true
       {{- with .nodeSelector }}
       nodeSelector: {{- toYaml . | nindent 8 }}
       {{- end }}
+      priorityClassName: system-node-critical
       serviceAccountName: {{ include "synology-csi.fullname" $ }}-node
       {{- with .tolerations }}
       tolerations: {{- toYaml . | nindent 8 }}

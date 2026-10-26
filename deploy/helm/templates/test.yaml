@@ -4,13 +4,15 @@ kind: PersistentVolumeClaim
 metadata:
   annotations:
     helm.sh/hook: test
-    helm.sh/hook-delete-policy: hook-succeeded
+    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
   labels: {{- include "synology-csi.labels" $ | nindent 4 }}
   name: {{ include "synology-csi.fullname" $ }}-test
 spec:
   accessModes:
     - ReadWriteOnce
-  storageClassName: synology-iscsi-storage-delete
+  {{- with $.Values.test.storageClassName }}
+  storageClassName: {{ . }}
+  {{- end }}
   resources:
     requests:
       storage: 1Gi
@@ -21,23 +23,23 @@ kind: Job
 metadata:
   annotations:
     helm.sh/hook: test
-    helm.sh/hook-delete-policy: hook-succeeded
+    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
   labels:
     app: test
     {{- include "synology-csi.labels" $ | nindent 4 }}
   name: {{ include "synology-csi.fullname" $ }}-test
 spec:
+  backoffLimit: 0
   template:
     metadata:
       labels:
         app: test
         {{- include "synology-csi.labels" $ | nindent 8 }}
-      name: {{ include "synology-csi.fullname" $ }}-test
     spec:
       containers:
         - name: touch
-          command: [ "/bin/sh", "-c", "echo 'Hello world!' >/data/file" ]
-          image: busybox
+          command: [ "/bin/sh", "-c", "echo 'Hello world!' >/data/file && cat /data/file" ]
+          image: {{ $.Values.test.image }}
           volumeMounts:
             - mountPath: /data
               name: data

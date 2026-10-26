@@ -59,3 +59,13 @@ name: client-info
 secret:
   secretName: {{ .Values.clientInfoSecret.name | default (include "synology-csi.fullname" . | printf "%s-client-info") }}
 {{- end }}
+
+{{/*
+Container securityContext for everything that needs no host access:
+*/}}
+{{- define "synology-csi.restrictedContainer" -}}
+allowPrivilegeEscalation: false
+capabilities:
+  drop: [ "ALL" ]
+readOnlyRootFilesystem: true
+{{- end }}
