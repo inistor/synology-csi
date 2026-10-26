@@ -1,0 +1,15 @@
+---
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: synology-iscsi-storage
+provisioner: csi.san.synology.com
+parameters:
+  protocol: "iscsi"         # the default protocol
+  fsType: "btrfs"           # ext4 (default), xfs or btrfs
+  # dsm: "1.1.1.1"          # which DSM, when several are configured
+  # location: "/volume1"    # which DSM volume holds the LUNs
+# ReadWriteOnce only: several nodes mounting one LUN's filesystem corrupts it.
+# Use NFS or SMB for ReadWriteMany.
+reclaimPolicy: Delete
+allowVolumeExpansion: true
