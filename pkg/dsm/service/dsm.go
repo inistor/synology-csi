@@ -717,8 +717,19 @@ func (service *DsmService) DeleteVolume(volId string) error {
 			"Couldn't determine whether volume[%s] still exists, not deleting: %v", volId, err)
 	}
 	if k8sVolume == nil {
-		log.Infof("Skip delete volume[%s] that is no exist", volId)
-		return nil
+		// A LUN whose target an earlier attempt already removed is listed by
+		// nothing, so look it up directly before calling the volume gone.
+		dsm, lun, err := findUnmappedLun(service.dsms, volId)
+		if err != nil {
+			return status.Errorf(codes.Unavailable,
+				"Couldn't determine whether volume[%s] still exists, not deleting: %v", volId, err)
+		}
+		if lun == nil {
+			log.Infof("Skip delete volume[%s] that is no exist", volId)
+			return nil
+		}
+		log.Infof("[%s] Deleting LUN(%s), left without a target by an earlier attempt", dsm.Ip, volId)
+		return deleteIscsiVolume(dsm, dsm.Ip, *lun, webapi.TargetInfo{})
 	}
 
 	dsm, err := service.GetDsm(k8sVolume.DsmIp)
@@ -753,28 +764,7 @@ func (service *DsmService) DeleteVolume(volId string) error {
 			return err
 		}
 	} else {
-		lun, target := k8sVolume.Lun, k8sVolume.Target
-
-		if err := dsm.LunDelete(lun.Uuid); err != nil {
-			if _, err := dsm.LunGet(lun.Uuid); err != nil && errors.Is(err, utils.NoSuchLunError("")) {
-				return nil
-			}
-			log.Errorf("[%s] Failed to delete LUN(%s): %v", dsm.Ip, lun.Uuid, err)
-			return err
-		}
-
-		if len(target.MappedLuns) != 1 {
-			log.Infof("Skip deletes target[%s] that was mapped with lun. DSM[%s]", target.Name, dsm.Ip)
-			return nil
-		}
-
-		if err := dsm.TargetDelete(strconv.Itoa(target.TargetId)); err != nil {
-			if _, err := dsm.TargetGet(strconv.Itoa(target.TargetId)); err != nil {
-				return nil
-			}
-			log.Errorf("[%s] Failed to delete target(%d): %v", dsm.Ip, target.TargetId, err)
-			return err
-		}
+		return deleteIscsiVolume(dsm, dsm.Ip, k8sVolume.Lun, k8sVolume.Target)
 	}
 
 	return nil
