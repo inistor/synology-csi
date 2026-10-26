@@ -17,6 +17,7 @@ on:
       - '**/*.go'
       - 'Dockerfile'
       - 'Makefile'
+  workflow_dispatch:
 
 env:
   IMAGE: ghcr.io/${{ github.repository }}
@@ -47,7 +48,7 @@ jobs:
 
   image:
     needs: build
-    if: github.event_name == 'push'
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-24.04
 
     permissions:
