@@ -23,10 +23,11 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-const (
-	DriverName    = "csi.san.synology.com" // CSI dirver name
-	DriverVersion = "1.4.0"
-)
+const DriverName = "csi.san.synology.com"
+
+// DriverVersion is set at build time with
+// -ldflags "-X github.com/inistor/synology-csi/pkg/driver.DriverVersion=...".
+var DriverVersion = "dev"
 
 var (
 	MultipathEnabled      = true
@@ -54,7 +55,6 @@ type Driver struct {
 func NewControllerAndNodeDriver(nodeID string, endpoint string, dsmService interfaces.IDsmService, tools tools) (*Driver, error) {
 	log.Debugf("NewControllerAndNodeDriver: DriverName: %v, DriverVersion: %v", DriverName, DriverVersion)
 
-	// TODO version format and validation
 	d := &Driver{
 		name:       DriverName,
 		version:    DriverVersion,

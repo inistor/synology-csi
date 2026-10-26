@@ -1,8 +1,10 @@
+//go:build sanity
+
+// Package sanitytest runs the CSI sanity suite against a real DSM: make sanity.
 package sanitytest
 
 import (
 	"fmt"
-	"io/ioutil"
 	"os"
 	"testing"
 
@@ -22,23 +24,11 @@ const (
 func TestSanity(t *testing.T) {
 	nodeID := "CSINode"
 
-	endpointFile, err := ioutil.TempFile("", "csi-gcs.*.sock")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.Remove(endpointFile.Name())
-
-	stagingPath, err := ioutil.TempDir("", "csi-gcs-staging")
-	if err != nil {
-		t.Fatal(err)
-	}
-	os.Remove(stagingPath)
-
-	targetPath, err := ioutil.TempDir("", "csi-gcs-target")
-	if err != nil {
-		t.Fatal(err)
-	}
-	os.Remove(targetPath)
+	tmp := t.TempDir()
+	endpointPath := tmp + "/csi.sock"
+	// The suite creates these itself.
+	stagingPath := tmp + "/staging"
+	targetPath := tmp + "/target"
 
 	info, err := common.LoadConfig(ConfigPath)
 	if err != nil {
@@ -65,7 +55,7 @@ func TestSanity(t *testing.T) {
 	}
 	tools := driver.NewTools(cmdExecutor)
 
-	endpoint := "unix://" + endpointFile.Name()
+	endpoint := "unix://" + endpointPath
 	drv, err := driver.NewControllerAndNodeDriver(nodeID, endpoint, dsmService, tools)
 	if err != nil {
 		t.Fatal(fmt.Sprintf("Failed to create driver: %v\n", err))
@@ -80,8 +70,13 @@ func TestSanity(t *testing.T) {
 	testConfig.SecretsFile = SecretsFilePath
 
 	// Set Input parameters for test
+	// SANITY_PROTOCOL picks the protocol under test (default smb).
+	protocol := os.Getenv("SANITY_PROTOCOL")
+	if protocol == "" {
+		protocol = "smb"
+	}
 	testConfig.TestVolumeParameters = map[string]string{
-		"protocol": "smb",
+		"protocol": protocol,
 	}
 
 	// testConfig.TestVolumeAccessType = "block" // raw block

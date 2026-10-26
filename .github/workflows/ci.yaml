@@ -7,6 +7,7 @@ on:
       - '**/*.go'
       - 'Dockerfile'
       - 'Makefile'
+      - 'deploy/helm/**'
     # A tags filter alone would stop branch pushes from triggering at all.
     branches:
       - '**'
@@ -20,6 +21,7 @@ on:
       - '**/*.go'
       - 'Dockerfile'
       - 'Makefile'
+      - 'deploy/helm/**'
   workflow_dispatch:
 
 env:
@@ -42,6 +44,9 @@ jobs:
         with:
           go-version-file: 'go.mod'
 
+      - name: Check formatting
+        run: test -z "$(gofmt -l .)" || { gofmt -l .; exit 1; }
+
       - name: Build binary
         run: make build
 
@@ -49,8 +54,24 @@ jobs:
       - name: Unit tests
         run: go test ./pkg/...
 
+  chart-lint:
+    runs-on: ubuntu-24.04
+
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7.0.1
+
+      # Helm is preinstalled on GitHub-hosted runners.
+      - name: Lint and render chart
+        run: |
+          helm lint deploy/helm --kube-version 1.35.0
+          helm template synology-csi deploy/helm --kube-version 1.35.0 >/dev/null
+
   image:
-    needs: build
+    needs: [build, chart-lint]
     if: github.event_name != 'pull_request'
     runs-on: ubuntu-24.04
 
@@ -92,6 +113,7 @@ jobs:
           context: .
           platforms: linux/amd64,linux/arm64,linux/arm/v7
           push: true
+          build-args: VERSION=${{ steps.meta.outputs.version }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
 

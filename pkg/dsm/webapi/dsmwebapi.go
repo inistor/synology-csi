@@ -10,7 +10,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -174,7 +173,7 @@ func (dsm *DSM) sendRequestWithoutConnectionCheck(data string, apiTemplate inter
 	// For debug print text body
 	var bodyText []byte
 	if logger.WebapiDebug {
-		bodyText, err = ioutil.ReadAll(resp.Body)
+		bodyText, err = io.ReadAll(resp.Body)
 		if err != nil {
 			return Response{}, err
 		}
