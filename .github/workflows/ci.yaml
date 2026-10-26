@@ -7,6 +7,9 @@ on:
       - '**/*.go'
       - 'Dockerfile'
       - 'Makefile'
+    # A tags filter alone would stop branch pushes from triggering at all.
+    branches:
+      - '**'
     # Path filters are not evaluated for tag pushes, so every v* tag releases.
     tags:
       - 'v*'
