@@ -113,7 +113,9 @@ jobs:
           context: .
           platforms: linux/amd64,linux/arm64,linux/arm/v7
           push: true
-          build-args: VERSION=${{ steps.meta.outputs.version }}
+          # Release tags report themselves; branch builds add the commit, which
+          # the branch name alone doesn't identify.
+          build-args: VERSION=${{ github.ref_type == 'tag' && steps.meta.outputs.version || format('{0}-{1}', steps.meta.outputs.version, github.sha) }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
 
