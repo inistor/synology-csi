@@ -326,9 +326,14 @@ func (ns *nodeServer) logoutTarget(k8sVolume *models.K8sVolumeRespSpec) error {
 	if volumeMountPath != "" {
 		inUse, err := deviceInUse(volumeMountPath)
 		if inUse {
-			return status.Errorf(codes.FailedPrecondition,
-				"Not logging out of target[%s]: device %s is still in use (mounted at: %s): %v",
-				k8sVolume.Target.Iqn, volumeMountPath, ns.tools.mountsOf(volumeMountPath), err)
+			// A mount in another mount namespace, a container's say, is
+			// invisible to findmnt on the host, which then reports "unknown".
+			msg := fmt.Sprintf("Not logging out of target[%s]: device %s is still in use (mounted at: %s)",
+				k8sVolume.Target.Iqn, volumeMountPath, ns.tools.mountsOf(volumeMountPath))
+			if err != nil {
+				msg += ": " + err.Error()
+			}
+			return status.Error(codes.FailedPrecondition, msg)
 		}
 		if err != nil {
 			log.Warnf("Couldn't check whether device %s is still in use before logout: %v", volumeMountPath, err)
