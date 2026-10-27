@@ -306,12 +306,44 @@ func (cs *controllerServer) DeleteVolume(ctx context.Context, req *csi.DeleteVol
 	return &csi.DeleteVolumeResponse{}, nil
 }
 
+// ControllerPublishVolume and ControllerUnpublishVolume have nothing to do on
+// the DSM: a node logs in to the target, or mounts the share, by itself. They
+// exist for the ordering that comes with them. A driver that publishes has
+// VolumeAttachments that outlive the node's unstage, and csi-provisioner then
+// holds DeleteVolume back until they are gone; without that, a PVC deleted
+// while its pod was going away had its LUN deleted under a node still
+// unmounting and logging out of it.
 func (cs *controllerServer) ControllerPublishVolume(ctx context.Context, req *csi.ControllerPublishVolumeRequest) (*csi.ControllerPublishVolumeResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "")
+	volumeId, nodeId := req.GetVolumeId(), req.GetNodeId()
+	if volumeId == "" {
+		return nil, status.Error(codes.InvalidArgument, "Volume ID missing in request")
+	}
+	if nodeId == "" {
+		return nil, status.Error(codes.InvalidArgument, "Node ID missing in request")
+	}
+	if req.GetVolumeCapability() == nil {
+		return nil, status.Error(codes.InvalidArgument, "Volume capability missing in request")
+	}
+
+	k8sVolume, err := cs.dsmService.GetVolume(volumeId)
+	if err != nil {
+		return nil, status.Errorf(codes.Unavailable,
+			"Couldn't determine whether volume[%s] exists: %v", volumeId, err)
+	}
+	if k8sVolume == nil {
+		return nil, status.Errorf(codes.NotFound, "Volume[%s] does not exist", volumeId)
+	}
+
+	return &csi.ControllerPublishVolumeResponse{}, nil
 }
 
+// ControllerUnpublishVolume succeeds whether or not the volume still exists:
+// there is nothing to undo, and a volume already gone is unpublished.
 func (cs *controllerServer) ControllerUnpublishVolume(ctx context.Context, req *csi.ControllerUnpublishVolumeRequest) (*csi.ControllerUnpublishVolumeResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "")
+	if req.GetVolumeId() == "" {
+		return nil, status.Error(codes.InvalidArgument, "Volume ID missing in request")
+	}
+	return &csi.ControllerUnpublishVolumeResponse{}, nil
 }
 
 func (cs *controllerServer) ValidateVolumeCapabilities(ctx context.Context, req *csi.ValidateVolumeCapabilitiesRequest) (*csi.ValidateVolumeCapabilitiesResponse, error) {
