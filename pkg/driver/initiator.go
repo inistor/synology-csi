@@ -129,13 +129,17 @@ func (t *tools) iscsiadm_session() []iscsiSession {
 	return parseSessions(string(out))
 }
 
-func (t *tools) iscsiadm_discovery(portal string) error {
+// iscsiadm_new_node records the one target and portal the driver is about to
+// log in to. SendTargets discovery would record every target the DSM serves,
+// on every portal it advertises, on each attach; those records belong to no
+// volume on this node, so nothing ever removed them. Creating a record that
+// already exists replaces it, so this is safe to repeat.
+func (t *tools) iscsiadm_new_node(iqn, portal string) error {
 	cmd := t.iscsiadm(
-		"-m", "discoverydb",
-		"--type", "sendtargets",
+		"-m", "node",
+		"--targetname", iqn,
 		"--portal", portal,
-		"--op", "new",
-		"--discover")
+		"--op", "new")
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("%s (%v)", string(out), err)
@@ -243,8 +247,8 @@ func (d *initiatorDriver) login(targetIqn string, portal string) error {
 		return nil
 	}
 
-	if err := d.tools.iscsiadm_discovery(portal); err != nil {
-		log.Errorf("Failed to discover portal [%s]: %v", portal, err)
+	if err := d.tools.iscsiadm_new_node(targetIqn, portal); err != nil {
+		log.Errorf("Failed to record target [%s] portal [%s]: %v", targetIqn, portal, err)
 		return err
 	}
 

@@ -145,3 +145,24 @@ func TestNodeRecordsAreRemovedForEveryPortal(t *testing.T) {
 		t.Errorf("delete is limited to one portal: %q", e.ran[i])
 	}
 }
+
+// Discovery recorded every target the DSM serves on every attach; only the
+// target being attached may be recorded, and before the login.
+func TestLoginRecordsOnlyItsOwnTarget(t *testing.T) {
+	e := &recordingExecutor{}
+	if err := newTestInitiator(e).login(testIqn, testPortal); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if i := e.find("discovery"); i >= 0 {
+		t.Errorf("ran a discovery, which records every target the DSM serves: %q", e.ran[i])
+	}
+	record := e.find("--op new")
+	login := e.find("--login")
+	if record < 0 || login < 0 || record > login {
+		t.Fatalf("expected the target to be recorded, then logged in to; ran: %v", e.ran)
+	}
+	if !strings.Contains(e.ran[record], testIqn) || !strings.Contains(e.ran[record], testPortal) {
+		t.Errorf("record is not for the target being attached: %q", e.ran[record])
+	}
+}
