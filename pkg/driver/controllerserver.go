@@ -41,6 +41,16 @@ type controllerServer struct {
 	Driver     *Driver
 	dsmService interfaces.IDsmService
 	Initiator  *initiatorDriver
+	inFlight   inFlight
+}
+
+// claim refuses a second operation on key while one is running. Release with
+// the returned func.
+func (cs *controllerServer) claim(key string) (func(), error) {
+	if !cs.inFlight.begin(key) {
+		return nil, status.Errorf(codes.Aborted, "An operation on %s is already in progress", key)
+	}
+	return func() { cs.inFlight.end(key) }, nil
 }
 
 func getSizeByCapacityRange(capRange *csi.CapacityRange) (int64, error) {
@@ -130,6 +140,11 @@ func (cs *controllerServer) CreateVolume(ctx context.Context, req *csi.CreateVol
 	if volName == "" {
 		return nil, status.Errorf(codes.InvalidArgument, "No name is provided")
 	}
+	release, err := cs.claim(volName)
+	if err != nil {
+		return nil, err
+	}
+	defer release()
 
 	if volCap == nil {
 		return nil, status.Errorf(codes.InvalidArgument, "No volume capabilities are provided")
@@ -297,6 +312,11 @@ func (cs *controllerServer) DeleteVolume(ctx context.Context, req *csi.DeleteVol
 	if volumeId == "" {
 		return nil, status.Errorf(codes.InvalidArgument, "No volume id is provided")
 	}
+	release, err := cs.claim(volumeId)
+	if err != nil {
+		return nil, err
+	}
+	defer release()
 
 	if err := cs.dsmService.DeleteVolume(volumeId); err != nil {
 		return nil, status.Errorf(codes.Internal,
@@ -509,6 +529,11 @@ func (cs *controllerServer) CreateSnapshot(ctx context.Context, req *csi.CreateS
 	if snapshotName == "" {
 		return nil, status.Error(codes.InvalidArgument, "Snapshot name is empty.")
 	}
+	release, err := cs.claim(snapshotName)
+	if err != nil {
+		return nil, err
+	}
+	defer release()
 
 	// idempotency
 	orgSnap := cs.dsmService.GetSnapshotByName(snapshotName)
@@ -563,8 +588,13 @@ func (cs *controllerServer) DeleteSnapshot(ctx context.Context, req *csi.DeleteS
 	if snapshotId == "" {
 		return nil, status.Error(codes.InvalidArgument, "Snapshot id is empty.")
 	}
+	release, err := cs.claim(snapshotId)
+	if err != nil {
+		return nil, err
+	}
+	defer release()
 
-	err := cs.dsmService.DeleteSnapshot(snapshotId)
+	err = cs.dsmService.DeleteSnapshot(snapshotId)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "Failed to DeleteSnapshot(%s), err: %v", snapshotId, err)
 	}
@@ -644,6 +674,11 @@ func (cs *controllerServer) ControllerExpandVolume(ctx context.Context, req *csi
 		return nil, status.Error(codes.InvalidArgument,
 			"InvalidArgument: Please check volume ID and capacity range.")
 	}
+	release, err := cs.claim(volumeId)
+	if err != nil {
+		return nil, err
+	}
+	defer release()
 
 	sizeInByte, err := getSizeByCapacityRange(capRange)
 	if err != nil {
