@@ -219,3 +219,23 @@ func TestTargetMappingOtherLunsIsKept(t *testing.T) {
 		t.Error("LUN not deleted")
 	}
 }
+
+// Another volume's LUN deleted between the target list and its lookup must not
+// make the listing incomplete, or every DeleteVolume running alongside fails.
+func TestListingSkipsALunDeletedMeanwhile(t *testing.T) {
+	f := newFakeIscsi()
+	f.targets[8] = webapi.TargetInfo{TargetId: 8, Name: "k8s-csi-pvc-gone", MappedLuns: []webapi.MappedLun{{LunUuid: "uuid-gone"}}}
+
+	infos, err := listDsmISCSIVolumes(f, "dsm")
+	if err != nil {
+		t.Fatalf("a LUN that no longer exists made the listing fail: %v", err)
+	}
+	if len(infos) != 1 || infos[0].Lun.Uuid != "uuid-1" {
+		t.Errorf("listed %v, want only uuid-1", infos)
+	}
+
+	f.failLunGet = errors.New("connection refused")
+	if _, err := listDsmISCSIVolumes(f, "dsm"); err == nil {
+		t.Error("an unreachable DSM must leave the listing incomplete")
+	}
+}

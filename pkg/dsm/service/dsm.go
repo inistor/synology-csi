@@ -779,30 +779,42 @@ func (service *DsmService) listISCSIVolumes(dsmIp string) (infos []*models.K8sVo
 			continue
 		}
 
-		targetInfos, err := dsm.TargetList()
-		if err != nil {
-			log.Errorf("[%s] Failed to list targets: %v", dsm.Ip, err)
-			listErr = errors.Join(listErr, fmt.Errorf("DSM[%s] failed to list targets: %w", dsm.Ip, err))
-			continue
-		}
+		dsmInfos, err := listDsmISCSIVolumes(dsm, dsm.Ip)
+		infos = append(infos, dsmInfos...)
+		listErr = errors.Join(listErr, err)
+	}
+	return infos, listErr
+}
 
-		for _, target := range targetInfos {
-			// TODO: use target.ConnectedSessions to filter targets
-			for _, mapping := range target.MappedLuns {
-				lun, err := dsm.LunGet(mapping.LunUuid)
-				if err != nil {
-					log.Errorf("[%s] Failed to get LUN(%s): %v", dsm.Ip, mapping.LunUuid, err)
-					listErr = errors.Join(listErr, fmt.Errorf("DSM[%s] failed to get LUN(%s): %w", dsm.Ip, mapping.LunUuid, err))
-					continue
-				}
+func listDsmISCSIVolumes(api iscsiDeleteAPI, dsmIp string) (infos []*models.K8sVolumeRespSpec, listErr error) {
+	targetInfos, err := api.TargetList()
+	if err != nil {
+		log.Errorf("[%s] Failed to list targets: %v", dsmIp, err)
+		return nil, fmt.Errorf("DSM[%s] failed to list targets: %w", dsmIp, err)
+	}
 
-				if !strings.HasPrefix(lun.Name, models.DevicePrefix) {
-					continue
-				}
-
-				// FIXME: filter same LUN mapping to two target
-				infos = append(infos, DsmLunToK8sVolume(dsm.Ip, lun, target))
+	for _, target := range targetInfos {
+		// TODO: use target.ConnectedSessions to filter targets
+		for _, mapping := range target.MappedLuns {
+			lun, err := api.LunGet(mapping.LunUuid)
+			if isNoSuchLun(err) {
+				// Deleted since the target list was taken, by a DeleteVolume
+				// running beside this one: proof of absence, not a gap in
+				// the listing.
+				continue
 			}
+			if err != nil {
+				log.Errorf("[%s] Failed to get LUN(%s): %v", dsmIp, mapping.LunUuid, err)
+				listErr = errors.Join(listErr, fmt.Errorf("DSM[%s] failed to get LUN(%s): %w", dsmIp, mapping.LunUuid, err))
+				continue
+			}
+
+			if !strings.HasPrefix(lun.Name, models.DevicePrefix) {
+				continue
+			}
+
+			// FIXME: filter same LUN mapping to two target
+			infos = append(infos, DsmLunToK8sVolume(dsmIp, lun, target))
 		}
 	}
 	return infos, listErr
