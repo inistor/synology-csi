@@ -199,6 +199,25 @@ Define them in the chart's `volumeSnapshotClasses` value. Parameters, all option
 | *description* | Description of the snapshot on DSM | `""` | iSCSI |
 | *is_locked* | Whether to lock the snapshot on DSM | `false` | iSCSI, SMB, NFS |
 
+### How volumes appear on DSM
+
+For auditing DSM against the cluster, e.g. hunting leftovers. `<pv>` is the PV name, `pvc-<uuid>`.
+
+| Protocol | DSM objects | Names | PV `volumeHandle` |
+| -------- | ----------- | ----- | ----------------- |
+| iSCSI | a LUN and a target | LUN and target `k8s-csi-<pv>`; target IQN `iqn.2000-01.com.synology:<dsm hostname>.<pv>` | the LUN's UUID |
+| NVMe-oF | a namespace and a subsystem | both `k8s-csi-<pv>`; NQN `nqn.2000-01.com.synology:<dsm hostname>.<pv>` | the namespace's UUID |
+| NFS, SMB | a shared folder | `k8s-csi-<pv>` cut to 32 characters, e.g. `k8s-csi-pvc-a97354a8-c4df-4b63-b` | the shared folder's UUID |
+
+- A share name keeps only part of the PV's UUID, so match it against the first 32 characters of `k8s-csi-<pv>`.
+  The full share name, with its DSM path, is in the PV's `volumeAttributes` (`baseDir` for NFS, `source` for both).
+- An NFS or SMB volume has no LUN or target: an audit of LUNs and targets alone reports every one of them as
+  missing. List shared folders separately.
+- An iSCSI LUN's description is the PVC's `<namespace>/<name>`.
+- To get the LUNs a target maps from `SYNO.Core.ISCSI.Target` `list`, ask for `additional=["mapped_lun"]`; the
+  answer has them under `mapped_luns`. DSM silently ignores unknown names, so asking for `mapped_luns` returns
+  targets that look unmapped.
+
 ## Development
 
 - `make build`: the driver and the `synocli` tool, in `bin/`. `VERSION` defaults to `git describe`.
