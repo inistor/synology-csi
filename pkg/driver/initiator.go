@@ -182,16 +182,19 @@ func (t *tools) iscsiadm_logout(iqn string) error {
 	return nil
 }
 
-// iscsiadm_delete_node removes the node record for a target. The record is
+// iscsiadm_delete_node removes the node records for a target. A record is
 // separate from the session: logging out ends the session but leaves the record
 // behind, and iscsid then retries the login every 60 seconds against a target
 // DSM has already deleted. Reported in #138, where a node kept doing that
 // across reboots until the record was removed by hand.
-func (t *tools) iscsiadm_delete_node(iqn string, portal string) error {
+//
+// Discovery records the target once per portal the DSM advertises (each of its
+// addresses, IPv6 too), so the records are removed for every portal, not only
+// the one the driver logged in through.
+func (t *tools) iscsiadm_delete_node(iqn string) error {
 	cmd := t.iscsiadm(
 		"-m", "node",
 		"--targetname", iqn,
-		"--portal", portal,
 		"-o", "delete")
 	if _, err := cmd.CombinedOutput(); err != nil {
 		return err
@@ -277,11 +280,11 @@ func (d *initiatorDriver) logout(targetIqn string, ip string) error {
 	// retrying forever is exactly the one where the session is already gone but
 	// the record is not, so returning early on "no session" would skip the
 	// cleanup precisely when it is needed.
-	if err := d.tools.iscsiadm_delete_node(targetIqn, portal); err != nil {
+	if err := d.tools.iscsiadm_delete_node(targetIqn); err != nil {
 		// Not fatal. The volume is detached either way; what is left behind is
 		// a record that makes noise rather than one that breaks anything.
-		log.Warnf("Failed to remove the iSCSI node record for target [%s] portal [%s], "+
-			"iscsid may keep retrying the login: %v", targetIqn, portal, err)
+		log.Warnf("Failed to remove the iSCSI node records for target [%s], "+
+			"iscsid may keep retrying the login: %v", targetIqn, err)
 	}
 
 	return nil

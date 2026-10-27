@@ -127,3 +127,21 @@ func TestFlushReportsFailure(t *testing.T) {
 			"is what loses the writes still held in memory")
 	}
 }
+
+// DSM advertises each target on several portals and discovery records every
+// one, so deleting by portal left the others, and the target's directory under
+// /etc/iscsi/nodes, behind for every volume.
+func TestNodeRecordsAreRemovedForEveryPortal(t *testing.T) {
+	e := &recordingExecutor{sessionOutput: sessionLine(testIqn)}
+	if err := newTestInitiator(e).logout(testIqn, "1.2.3.4"); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	i := e.find("-o delete")
+	if i < 0 {
+		t.Fatalf("expected the node records to be deleted, ran: %v", e.ran)
+	}
+	if strings.Contains(e.ran[i], "--portal") {
+		t.Errorf("delete is limited to one portal: %q", e.ran[i])
+	}
+}
