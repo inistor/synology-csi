@@ -22,7 +22,8 @@ It is not affiliated with, endorsed by or supported by Synology Inc.; "Synology"
     would corrupt; use NFS or SMB for ReadWriteMany;
   - DSM requests time out instead of hanging, reuse connections, and the driver exits when it can log in to no DSM;
   - volume stats come from the mount instead of a DSM listing per volume per minute;
-  - NFS: an explicit client allowlist (`nfsClientAllowlist`) and `mountPermissions` setgid/sticky bits honoured.
+  - NFS: an explicit client allowlist (`nfsClientAllowlist`) and `mountPermissions` setgid/sticky bits honoured;
+    a pod's `fsGroup` applies to NFS and SMB volumes too, so pods running as non-root can use them.
 - **A maintained Helm chart** as the single install path, for Kubernetes 1.35+, with current CSI sidecars,
   leader election and a non-root, unprivileged controller.
 - **Current toolchain:** Go 1.27 and current releases of all dependencies.

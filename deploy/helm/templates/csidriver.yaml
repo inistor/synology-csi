@@ -6,10 +6,14 @@ metadata:
   labels: {{- include "synology-csi.labels" $ | nindent 4 }}
   name: {{ $.Values.driverName }}
 spec:
-  # The driver implements no ControllerPublishVolume, so attaching is a no-op,
-  # but the VolumeAttachment it creates is what stops Kubernetes from attaching
-  # a ReadWriteOnce volume to a second node.
+  # ControllerPublishVolume has nothing to do on the DSM, but the
+  # VolumeAttachment it comes with keeps a ReadWriteOnce volume off a second
+  # node, and keeps DeleteVolume waiting until every node has let go.
   attachRequired: true
+  # Apply a pod's fsGroup to every volume. The default skips volumes that are
+  # ReadWriteMany or have no fsType, which leaves NFS and SMB shares owned by
+  # root and unusable by pods that run as another user.
+  fsGroupPolicy: File
   podInfoOnMount: true
   volumeLifecycleModes:
     - Persistent
