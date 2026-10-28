@@ -125,6 +125,11 @@ spec:
               mountPath: /dev
             - name: host-root
               mountPath: /host
+              # Without this, /host keeps a private copy of every mount the
+              # host had when the pod started. A copy of a volume staged before
+              # a restart keeps its filesystem mounted after NodeUnstageVolume
+              # unmounts it, so the device stays busy and logout never happens.
+              mountPropagation: HostToContainer
             - name: kubelet-dir
               mountPath: {{ $.Values.node.kubeletPath }}
               mountPropagation: Bidirectional
