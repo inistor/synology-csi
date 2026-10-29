@@ -206,6 +206,9 @@ func (service *DsmService) createSMBorNFSVolumeByDsm(dsm *webapi.DSM, spec *mode
 
 	// 3. Create Share
 	sizeInMB := utils.BytesToMBCeil(spec.Size)
+	// The Recycle Bin puts a #recycle folder in the share's root, which an NFS
+	// volume's pods see as part of their data.
+	recycleBin := spec.Protocol != utils.ProtocolNfs
 	shareSpec := webapi.ShareCreateSpec{
 		Name: spec.ShareName,
 		ShareInfo: webapi.ShareInfo{
@@ -213,8 +216,8 @@ func (service *DsmService) createSMBorNFSVolumeByDsm(dsm *webapi.DSM, spec *mode
 			VolPath:             spec.Location,
 			Desc:                "Created by Synology K8s CSI",
 			EnableShareCow:      false,
-			EnableRecycleBin:    true,
-			RecycleBinAdminOnly: true,
+			EnableRecycleBin:    recycleBin,
+			RecycleBinAdminOnly: recycleBin,
 			Encryption:          0,
 			QuotaForCreate:      &sizeInMB,
 		},
