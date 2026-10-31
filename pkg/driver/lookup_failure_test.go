@@ -25,7 +25,7 @@ var errListIncomplete = errors.New("DSM[1.2.3.4] failed to load NFS privilege of
 // whether CreateVolume was reached, because reaching it after a failed lookup is
 // how a second volume gets created for a PVC that already has one.
 type lookupFailingService struct {
-	createVolumeCalled bool
+	createVolumeCalled, createSnapshotCalled bool
 }
 
 func (s *lookupFailingService) GetVolume(volId string) (*models.K8sVolumeRespSpec, error) {
@@ -60,15 +60,20 @@ func (s *lookupFailingService) ExpandVolume(volId string, newSize int64) (*model
 	return nil, nil
 }
 func (s *lookupFailingService) CreateSnapshot(spec *models.CreateK8sVolumeSnapshotSpec) (*models.K8sSnapshotRespSpec, error) {
-	return nil, nil
+	s.createSnapshotCalled = true
+	return &models.K8sSnapshotRespSpec{Uuid: "newly-created"}, nil
 }
-func (s *lookupFailingService) DeleteSnapshot(snapshotUuid string) error        { return nil }
-func (s *lookupFailingService) ListAllSnapshots() []*models.K8sSnapshotRespSpec { return nil }
-func (s *lookupFailingService) ListSnapshots(volId string) []*models.K8sSnapshotRespSpec {
-	return nil
+func (s *lookupFailingService) DeleteSnapshot(snapshotUuid string) error {
+	return status.Errorf(codes.Unavailable, "Couldn't determine whether snapshot[%s] exists: %v", snapshotUuid, errListIncomplete)
 }
-func (s *lookupFailingService) GetSnapshotByName(snapshotName string) *models.K8sSnapshotRespSpec {
-	return nil
+func (s *lookupFailingService) ListAllSnapshots() ([]*models.K8sSnapshotRespSpec, error) {
+	return []*models.K8sSnapshotRespSpec{{Uuid: "still-visible"}}, errListIncomplete
+}
+func (s *lookupFailingService) ListSnapshots(volId string) ([]*models.K8sSnapshotRespSpec, error) {
+	return []*models.K8sSnapshotRespSpec{{Uuid: "still-visible"}}, errListIncomplete
+}
+func (s *lookupFailingService) GetSnapshotByName(snapshotName string) (*models.K8sSnapshotRespSpec, error) {
+	return nil, errListIncomplete
 }
 
 // testDriver mirrors the access modes the real driver registers, so requests
@@ -162,4 +167,38 @@ func TestNodeUnstageDoesNotClaimSuccessWhenLookupFails(t *testing.T) {
 	})
 
 	wantUnavailable(t, err)
+}
+
+func TestCreateSnapshotDoesNotSnapshotWhenIdempotencyCheckFails(t *testing.T) {
+	svc := &lookupFailingService{}
+	cs := &controllerServer{Driver: testDriver(), dsmService: svc}
+
+	_, err := cs.CreateSnapshot(context.Background(), &csi.CreateSnapshotRequest{
+		Name:           "snapshot-1",
+		SourceVolumeId: "vol-1",
+	})
+
+	wantUnavailable(t, err)
+	if svc.createSnapshotCalled {
+		t.Error("took a snapshot without knowing whether one already existed, which can leave two DSM snapshots for one VolumeSnapshot")
+	}
+}
+
+func TestDeleteSnapshotKeepsTheServicesRetryableError(t *testing.T) {
+	cs := &controllerServer{Driver: testDriver(), dsmService: &lookupFailingService{}}
+
+	// Success here drops the VolumeSnapshotContent while the DSM snapshot may
+	// still exist, and nothing would be left pointing at it.
+	_, err := cs.DeleteSnapshot(context.Background(), &csi.DeleteSnapshotRequest{SnapshotId: "snap-1"})
+
+	wantUnavailable(t, err)
+}
+
+func TestListSnapshotsDoesNotReturnAPartialList(t *testing.T) {
+	cs := &controllerServer{Driver: testDriver(), dsmService: &lookupFailingService{}}
+
+	for _, req := range []*csi.ListSnapshotsRequest{{}, {SourceVolumeId: "vol-1"}} {
+		_, err := cs.ListSnapshots(context.Background(), req)
+		wantUnavailable(t, err)
+	}
 }

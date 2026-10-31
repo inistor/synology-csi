@@ -339,35 +339,33 @@ func (service *DsmService) listSMBorNFSVolumes(dsmIp string) (infos []*models.K8
 	return infos, listErr
 }
 
-func (service *DsmService) listSMBorNFSSnapshotsByDsm(dsm *webapi.DSM) (infos []*models.K8sSnapshotRespSpec) {
-	volumes, err := service.listSMBorNFSVolumes(dsm.Ip)
-	if err != nil {
-		// Snapshot listing is best-effort; log the gap rather than hiding it.
-		log.Errorf("[%s] Share list was incomplete while listing snapshots: %v", dsm.Ip, err)
-	}
+// A non-nil error means the listing was incomplete: absence from the result
+// does not prove a snapshot is gone.
+func (service *DsmService) listSMBorNFSSnapshotsByDsm(dsm *webapi.DSM) (infos []*models.K8sSnapshotRespSpec, listErr error) {
+	volumes, listErr := service.listSMBorNFSVolumes(dsm.Ip)
 	for _, volume := range volumes {
 		shareInfo := volume.Share
 		shareSnaps, err := dsm.ShareSnapshotList(shareInfo.Name)
 		if err != nil {
 			log.Errorf("[%s] Failed to list share snapshots: %v", dsm.Ip, err)
+			listErr = errors.Join(listErr, fmt.Errorf("DSM[%s] failed to list snapshots of share(%s): %w", dsm.Ip, shareInfo.Name, err))
 			continue
 		}
 		for _, info := range shareSnaps {
 			infos = append(infos, DsmShareSnapshotToK8sSnapshot(dsm.Ip, info, shareInfo, volume.Protocol))
 		}
 	}
-	return infos
+	return infos, listErr
 }
 
-func (service *DsmService) getSMBorNFSSnapshot(snapshotUuid string) *models.K8sSnapshotRespSpec {
+func (service *DsmService) getSMBorNFSSnapshot(snapshotUuid string) (*models.K8sSnapshotRespSpec, error) {
+	var snapshots []*models.K8sSnapshotRespSpec
+	var listErr error
 	for _, dsm := range service.dsms {
-		snapshots := service.listSMBorNFSSnapshotsByDsm(dsm)
-		for _, snap := range snapshots {
-			if snap.Uuid == snapshotUuid {
-				return snap
-			}
-		}
+		infos, err := service.listSMBorNFSSnapshotsByDsm(dsm)
+		snapshots = append(snapshots, infos...)
+		listErr = errors.Join(listErr, err)
 	}
 
-	return nil
+	return findSnapshot(snapshots, listErr, func(s *models.K8sSnapshotRespSpec) bool { return s.Uuid == snapshotUuid })
 }

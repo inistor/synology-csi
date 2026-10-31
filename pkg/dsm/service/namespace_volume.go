@@ -326,25 +326,25 @@ func (service *DsmService) listNVMeVolumes(dsmIp string) (infos []*models.K8sVol
 	return infos, listErr
 }
 
-func (service *DsmService) listNVMeSnapshotsByDsm(dsm *webapi.DSM) (infos []*models.K8sSnapshotRespSpec) {
+// A non-nil error means the listing was incomplete: absence from the result
+// does not prove a snapshot is gone.
+func (service *DsmService) listNVMeSnapshotsByDsm(dsm *webapi.DSM) (infos []*models.K8sSnapshotRespSpec, listErr error) {
 	if !dsm.SupportNvmeof {
-		return infos
+		return infos, nil
 	}
 
-	volumes, err := service.listNVMeVolumes(dsm.Ip)
-	if err != nil {
-		log.Errorf("[%s] Namespace list was incomplete while listing snapshots: %v", dsm.Ip, err)
-	}
+	volumes, listErr := service.listNVMeVolumes(dsm.Ip)
 	for _, volume := range volumes {
 		nsInfo := volume.Namespace
 		nsSnaps, err := dsm.NamespaceSnapshotList(nsInfo.Uuid)
 		if err != nil {
 			log.Errorf("[%s] Failed to list namespace snapshots: %v", dsm.Ip, err)
+			listErr = errors.Join(listErr, fmt.Errorf("DSM[%s] failed to list snapshots of namespace(%s): %w", dsm.Ip, nsInfo.Uuid, err))
 			continue
 		}
 		for _, info := range nsSnaps {
 			infos = append(infos, DsmSanSnapshotToK8sSnapshot(dsm.Ip, info, utils.ProtocolNvme))
 		}
 	}
-	return infos
+	return infos, listErr
 }

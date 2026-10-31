@@ -26,8 +26,11 @@ type IDsmService interface {
 	ExpandVolume(volId string, newSize int64) (*models.K8sVolumeRespSpec, error)
 	CreateSnapshot(spec *models.CreateK8sVolumeSnapshotSpec) (*models.K8sSnapshotRespSpec, error)
 	DeleteSnapshot(snapshotUuid string) error
-	ListAllSnapshots() []*models.K8sSnapshotRespSpec
-	ListSnapshots(volId string) []*models.K8sSnapshotRespSpec
+	// A non-nil error means the listing was incomplete: absence from the result
+	// does not prove a snapshot is gone.
+	ListAllSnapshots() ([]*models.K8sSnapshotRespSpec, error)
+	ListSnapshots(volId string) ([]*models.K8sSnapshotRespSpec, error)
 	GetVolumeByName(volName string) (*models.K8sVolumeRespSpec, error)
-	GetSnapshotByName(snapshotName string) *models.K8sSnapshotRespSpec
+	// Returns (nil, nil) only when the snapshot is known not to exist.
+	GetSnapshotByName(snapshotName string) (*models.K8sSnapshotRespSpec, error)
 }

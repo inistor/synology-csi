@@ -536,7 +536,12 @@ func (cs *controllerServer) CreateSnapshot(ctx context.Context, req *csi.CreateS
 	defer release()
 
 	// idempotency
-	orgSnap := cs.dsmService.GetSnapshotByName(snapshotName)
+	orgSnap, err := cs.dsmService.GetSnapshotByName(snapshotName)
+	if err != nil {
+		// Creating anyway could leave two DSM snapshots for one VolumeSnapshot.
+		return nil, status.Errorf(codes.Unavailable,
+			"Couldn't determine whether snapshot [%s] already exists: %v", snapshotName, err)
+	}
 	if orgSnap != nil {
 		// already existed
 		if orgSnap.ParentUuid != srcVolId {
@@ -596,6 +601,9 @@ func (cs *controllerServer) DeleteSnapshot(ctx context.Context, req *csi.DeleteS
 
 	err = cs.dsmService.DeleteSnapshot(snapshotId)
 	if err != nil {
+		if _, ok := status.FromError(err); ok {
+			return nil, err
+		}
 		return nil, status.Errorf(codes.Internal, "Failed to DeleteSnapshot(%s), err: %v", snapshotId, err)
 	}
 
@@ -618,10 +626,15 @@ func (cs *controllerServer) ListSnapshots(ctx context.Context, req *csi.ListSnap
 	pagingSkip := ("" != startingToken)
 	var snapshots []*models.K8sSnapshotRespSpec
 
+	var err error
 	if srcVolId != "" {
-		snapshots = cs.dsmService.ListSnapshots(srcVolId)
+		snapshots, err = cs.dsmService.ListSnapshots(srcVolId)
 	} else {
-		snapshots = cs.dsmService.ListAllSnapshots()
+		snapshots, err = cs.dsmService.ListAllSnapshots()
+	}
+	if err != nil {
+		// A partial list tells the caller the missing snapshots are gone.
+		return nil, status.Errorf(codes.Unavailable, "Couldn't list snapshots: %v", err)
 	}
 
 	sort.Sort(models.BySnapshotAndParentUuid(snapshots))

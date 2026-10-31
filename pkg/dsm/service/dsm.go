@@ -633,7 +633,11 @@ func (service *DsmService) CreateVolume(spec *models.CreateK8sVolumeSpec) (*mode
 
 	if spec.SourceSnapshotId != "" {
 		/* Create volume by snapshot */
-		snapshot := service.GetSnapshotByUuid(spec.SourceSnapshotId)
+		snapshot, err := service.GetSnapshotByUuid(spec.SourceSnapshotId)
+		if err != nil {
+			return nil, status.Errorf(codes.Unavailable,
+				"Couldn't determine whether snapshot[%s] exists: %v", spec.SourceSnapshotId, err)
+		}
 		if snapshot == nil {
 			return nil, status.Errorf(codes.NotFound, "No such snapshot id: %s", spec.SourceSnapshotId)
 		}
@@ -902,14 +906,9 @@ func (service *DsmService) findVolume(
 	return nil, nil
 }
 
-func (service *DsmService) GetSnapshotByName(snapshotName string) *models.K8sSnapshotRespSpec {
-	snaps := service.ListAllSnapshots()
-	for _, snap := range snaps {
-		if snap.Name == snapshotName {
-			return snap
-		}
-	}
-	return nil
+func (service *DsmService) GetSnapshotByName(snapshotName string) (*models.K8sSnapshotRespSpec, error) {
+	snaps, err := service.ListAllSnapshots()
+	return findSnapshot(snaps, err, func(s *models.K8sSnapshotRespSpec) bool { return s.Name == snapshotName })
 }
 
 func (service *DsmService) ExpandVolume(volId string, newSize int64) (*models.K8sVolumeRespSpec, error) {
@@ -1003,8 +1002,12 @@ func (service *DsmService) CreateSnapshot(spec *models.CreateK8sVolumeSnapshotSp
 			return nil, status.Errorf(codes.Internal, "Failed to SnapshotCreate(%s), err: %v", srcVolId, err)
 		}
 
-		if snapshot := service.getISCSISnapshot(snapshotUuid); snapshot != nil {
+		snapshot, err := service.getISCSISnapshot(snapshotUuid)
+		if snapshot != nil {
 			return snapshot, nil
+		}
+		if err != nil {
+			return nil, status.Errorf(codes.Unavailable, "Couldn't look up iscsi snapshot (%s) just created: %v", snapshotUuid, err)
 		}
 
 		return nil, status.Errorf(codes.NotFound, "Failed to get iscsi snapshot (%s). Not found", snapshotUuid)
@@ -1020,11 +1023,16 @@ func (service *DsmService) CreateSnapshot(spec *models.CreateK8sVolumeSnapshotSp
 			return nil, status.Errorf(codes.Internal, "Failed to ShareSnapshotCreate(%s), err: %v", srcVolId, err)
 		}
 
-		snapshots := service.listSMBorNFSSnapshotsByDsm(dsm)
-		for _, snapshot := range snapshots {
-			if snapshot.Time == snapshotTime && snapshot.ParentUuid == srcVolId {
-				return snapshot, nil
-			}
+		snapshots, err := service.listSMBorNFSSnapshotsByDsm(dsm)
+		snapshot, err := findSnapshot(snapshots, err, func(s *models.K8sSnapshotRespSpec) bool {
+			return s.Time == snapshotTime && s.ParentUuid == srcVolId
+		})
+		if snapshot != nil {
+			return snapshot, nil
+		}
+		if err != nil {
+			return nil, status.Errorf(codes.Unavailable, "Couldn't look up %s snapshot (%s, %s) just created: %v",
+				k8sVolume.Protocol, snapshotTime, srcVolId, err)
 		}
 		return nil, status.Errorf(codes.NotFound, "Failed to get %s snapshot (%s, %s). Not found",
 			k8sVolume.Protocol, snapshotTime, srcVolId)
@@ -1059,18 +1067,19 @@ func (service *DsmService) CreateSnapshot(spec *models.CreateK8sVolumeSnapshotSp
 	return nil, status.Error(codes.InvalidArgument, "Unsupported volume protocol")
 }
 
-func (service *DsmService) GetSnapshotByUuid(snapshotUuid string) *models.K8sSnapshotRespSpec {
-	snaps := service.ListAllSnapshots()
-	for _, snap := range snaps {
-		if snap.Uuid == snapshotUuid {
-			return snap
-		}
-	}
-	return nil
+func (service *DsmService) GetSnapshotByUuid(snapshotUuid string) (*models.K8sSnapshotRespSpec, error) {
+	snaps, err := service.ListAllSnapshots()
+	return findSnapshot(snaps, err, func(s *models.K8sSnapshotRespSpec) bool { return s.Uuid == snapshotUuid })
 }
 
 func (service *DsmService) DeleteSnapshot(snapshotUuid string) error {
-	snapshot := service.GetSnapshotByUuid(snapshotUuid)
+	snapshot, err := service.GetSnapshotByUuid(snapshotUuid)
+	if err != nil {
+		// Reporting success here drops the VolumeSnapshotContent, and with it the
+		// only record of a DSM snapshot that may still exist.
+		return status.Errorf(codes.Unavailable,
+			"Couldn't determine whether snapshot[%s] exists: %v", snapshotUuid, err)
+	}
 	if snapshot == nil {
 		return nil
 	}
@@ -1081,7 +1090,7 @@ func (service *DsmService) DeleteSnapshot(snapshotUuid string) error {
 
 	if snapshot.Protocol == utils.ProtocolSmb || snapshot.Protocol == utils.ProtocolNfs {
 		if err := dsm.ShareSnapshotDelete(snapshot.Time, snapshot.ParentName); err != nil {
-			if snapshot := service.getSMBorNFSSnapshot(snapshotUuid); snapshot == nil { // idempotency
+			if snapshot, lookupErr := service.getSMBorNFSSnapshot(snapshotUuid); snapshot == nil && lookupErr == nil { // idempotency
 				return nil
 			}
 
@@ -1115,16 +1124,16 @@ func (service *DsmService) DeleteSnapshot(snapshotUuid string) error {
 	return nil
 }
 
-func (service *DsmService) listISCSISnapshotsByDsm(dsm *webapi.DSM) (infos []*models.K8sSnapshotRespSpec) {
-	volumes, err := service.listISCSIVolumes(dsm.Ip)
-	if err != nil {
-		log.Errorf("[%s] Volume list was incomplete while listing snapshots: %v", dsm.Ip, err)
-	}
+// A non-nil error means the listing was incomplete: absence from the result
+// does not prove a snapshot is gone.
+func (service *DsmService) listISCSISnapshotsByDsm(dsm *webapi.DSM) (infos []*models.K8sSnapshotRespSpec, listErr error) {
+	volumes, listErr := service.listISCSIVolumes(dsm.Ip)
 	for _, volume := range volumes {
 		lunInfo := volume.Lun
 		lunSnaps, err := dsm.SnapshotList(lunInfo.Uuid)
 		if err != nil {
 			log.Errorf("[%s] Failed to list LUN[%s] snapshots: %v", dsm.Ip, lunInfo.Uuid, err)
+			listErr = errors.Join(listErr, fmt.Errorf("DSM[%s] failed to list LUN[%s] snapshots: %w", dsm.Ip, lunInfo.Uuid, err))
 			continue
 		}
 
@@ -1135,41 +1144,54 @@ func (service *DsmService) listISCSISnapshotsByDsm(dsm *webapi.DSM) (infos []*mo
 	return
 }
 
-func (service *DsmService) ListAllSnapshots() []*models.K8sSnapshotRespSpec {
-	var allInfos []*models.K8sSnapshotRespSpec
-
+func (service *DsmService) ListAllSnapshots() (allInfos []*models.K8sSnapshotRespSpec, listErr error) {
 	for _, dsm := range service.dsms {
-		allInfos = append(allInfos, service.listISCSISnapshotsByDsm(dsm)...)
-		allInfos = append(allInfos, service.listSMBorNFSSnapshotsByDsm(dsm)...)
-		allInfos = append(allInfos, service.listNVMeSnapshotsByDsm(dsm)...)
+		for _, list := range []func(*webapi.DSM) ([]*models.K8sSnapshotRespSpec, error){
+			service.listISCSISnapshotsByDsm, service.listSMBorNFSSnapshotsByDsm, service.listNVMeSnapshotsByDsm,
+		} {
+			infos, err := list(dsm)
+			allInfos = append(allInfos, infos...)
+			listErr = errors.Join(listErr, err)
+		}
 	}
 
-	return allInfos
+	return allInfos, listErr
 }
 
-func (service *DsmService) ListSnapshots(volId string) []*models.K8sSnapshotRespSpec {
+// findSnapshot picks the snapshot match accepts out of a listing. Finding it
+// proves it exists however incomplete the listing was, but not finding it in an
+// incomplete listing proves nothing: that is an error, not (nil, nil).
+func findSnapshot(snaps []*models.K8sSnapshotRespSpec, listErr error, match func(*models.K8sSnapshotRespSpec) bool) (*models.K8sSnapshotRespSpec, error) {
+	for _, snap := range snaps {
+		if match(snap) {
+			return snap, nil
+		}
+	}
+	return nil, listErr
+}
+
+// A non-nil error means the volume's snapshots could not be listed; no
+// snapshots and no error means the volume has none, or does not exist.
+func (service *DsmService) ListSnapshots(volId string) ([]*models.K8sSnapshotRespSpec, error) {
 	var allInfos []*models.K8sSnapshotRespSpec
 
 	k8sVolume, err := service.GetVolume(volId)
 	if err != nil {
-		log.Errorf("Couldn't determine whether volume[%s] exists, reporting no snapshots: %v", volId, err)
-		return nil
+		return nil, fmt.Errorf("couldn't determine whether volume[%s] exists: %w", volId, err)
 	}
 	if k8sVolume == nil {
-		return nil
+		return nil, nil
 	}
 
 	dsm, err := service.GetDsm(k8sVolume.DsmIp)
 	if err != nil {
-		log.Errorf("Failed to get DSM[%s]", k8sVolume.DsmIp)
-		return nil
+		return nil, fmt.Errorf("failed to get DSM[%s]: %w", k8sVolume.DsmIp, err)
 	}
 
 	if k8sVolume.Protocol == utils.ProtocolIscsi {
 		infos, err := dsm.SnapshotList(volId)
 		if err != nil {
-			log.Errorf("Failed to SnapshotList[%s]", volId)
-			return nil
+			return nil, fmt.Errorf("failed to list snapshots of LUN[%s]: %w", volId, err)
 		}
 		for _, info := range infos {
 			allInfos = append(allInfos, DsmSanSnapshotToK8sSnapshot(dsm.Ip, info, k8sVolume.Protocol))
@@ -1177,8 +1199,7 @@ func (service *DsmService) ListSnapshots(volId string) []*models.K8sSnapshotResp
 	} else if dsm.SupportNvmeof && k8sVolume.Protocol == utils.ProtocolNvme {
 		infos, err := dsm.NamespaceSnapshotList(volId)
 		if err != nil {
-			log.Errorf("Failed to NamespaceSnapshotList[%s]", volId)
-			return nil
+			return nil, fmt.Errorf("failed to list snapshots of namespace[%s]: %w", volId, err)
 		}
 		for _, info := range infos {
 			allInfos = append(allInfos, DsmSanSnapshotToK8sSnapshot(dsm.Ip, info, k8sVolume.Protocol))
@@ -1186,15 +1207,14 @@ func (service *DsmService) ListSnapshots(volId string) []*models.K8sSnapshotResp
 	} else {
 		infos, err := dsm.ShareSnapshotList(k8sVolume.Share.Name)
 		if err != nil {
-			log.Errorf("Failed to ShareSnapshotList[%s]", k8sVolume.Share.Name)
-			return nil
+			return nil, fmt.Errorf("failed to list snapshots of share[%s]: %w", k8sVolume.Share.Name, err)
 		}
 		for _, info := range infos {
 			allInfos = append(allInfos, DsmShareSnapshotToK8sSnapshot(dsm.Ip, info, k8sVolume.Share, k8sVolume.Protocol))
 		}
 	}
 
-	return allInfos
+	return allInfos, nil
 }
 
 func DsmShareSnapshotToK8sSnapshot(dsmIp string, info webapi.ShareSnapshotInfo, shareInfo webapi.ShareInfo, protocol string) *models.K8sSnapshotRespSpec {
@@ -1229,15 +1249,14 @@ func DsmSanSnapshotToK8sSnapshot(dsmIp string, info webapi.SnapshotInfo, protoco
 	}
 }
 
-func (service *DsmService) getISCSISnapshot(snapshotUuid string) *models.K8sSnapshotRespSpec {
+func (service *DsmService) getISCSISnapshot(snapshotUuid string) (*models.K8sSnapshotRespSpec, error) {
+	var snapshots []*models.K8sSnapshotRespSpec
+	var listErr error
 	for _, dsm := range service.dsms {
-		snapshots := service.listISCSISnapshotsByDsm(dsm)
-		for _, snap := range snapshots {
-			if snap.Uuid == snapshotUuid {
-				return snap
-			}
-		}
+		infos, err := service.listISCSISnapshotsByDsm(dsm)
+		snapshots = append(snapshots, infos...)
+		listErr = errors.Join(listErr, err)
 	}
 
-	return nil
+	return findSnapshot(snapshots, listErr, func(s *models.K8sSnapshotRespSpec) bool { return s.Uuid == snapshotUuid })
 }
