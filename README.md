@@ -59,7 +59,9 @@ Driver name: `csi.san.synology.com`.
   - NVMe/TCP: the `nvme-tcp` kernel module;
   - btrfs/xfs volumes: kernel support for that filesystem.
 - For snapshots: the [external-snapshotter](https://github.com/kubernetes-csi/external-snapshotter) CRDs and
-  snapshot-controller (v8.x) installed in the cluster.
+  snapshot-controller installed in the cluster, at the same version as the chart's `images.snapshotter.tag`.
+  Upstream's install manifest at each tag runs the previous release's snapshot-controller image, so override its
+  image to match.
 
 ## Installation
 
@@ -207,6 +209,10 @@ Define them in the chart's `volumeSnapshotClasses` value. Parameters, all option
 | ---- | ----------- | ------- | --------- |
 | *description* | Description of the snapshot on DSM | `""` | iSCSI |
 | *is_locked* | Whether to lock the snapshot on DSM | `false` | iSCSI, SMB, NFS |
+
+A volume restored from an iSCSI or NVMe snapshot is a copy of the source, filesystem UUID included. btrfs refuses
+to mount two filesystems with the same UUID on one node before Linux 6.7 (`temp-fsid`), so on older kernels keep
+the restored volume off the node that has the source mounted.
 
 ### How volumes appear on DSM
 
