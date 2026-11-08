@@ -94,6 +94,9 @@ spec:
             {{- if $.Values.node.supportChrootDir }}
             - --chroot-dir=/host
             {{- end }}
+            {{- with $.Values.node.iscsiReplacementTimeout }}
+            - --iscsi-replacement-timeout={{ . }}
+            {{- end }}
             {{- with $.Values.node.extraArgs }}
             {{- toYaml . | nindent 12 }}
             {{- end }}

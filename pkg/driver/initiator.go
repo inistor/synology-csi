@@ -50,6 +50,9 @@ const (
 
 type tools struct {
 	executor hostexec.Executor
+	// ISCSIReplacementTimeout, in seconds, goes into the record of every target
+	// logged in to. Zero leaves the record with the node's own default.
+	ISCSIReplacementTimeout int
 }
 
 // NewTools creates a new tools wrapper for calling utilities with given executor
@@ -160,6 +163,21 @@ func (t *tools) iscsiadm_login(iqn, portal string) error {
 	return nil
 }
 
+func (t *tools) iscsiadm_update_node_replacement_timeout(iqn, portal string) error {
+	cmd := t.iscsiadm(
+		"-m", "node",
+		"--targetname", iqn,
+		"--portal", portal,
+		"--op", "update",
+		"--name", "node.session.timeo.replacement_timeout",
+		"--value", strconv.Itoa(t.ISCSIReplacementTimeout))
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("%s (%v)", string(out), err)
+	}
+	return nil
+}
+
 func (t *tools) iscsiadm_update_node_startup(iqn, portal string) error {
 	cmd := t.iscsiadm(
 		"-m", "node",
@@ -250,6 +268,18 @@ func (d *initiatorDriver) login(targetIqn string, portal string) error {
 	if err := d.tools.iscsiadm_new_node(targetIqn, portal); err != nil {
 		log.Errorf("Failed to record target [%s] portal [%s]: %v", targetIqn, portal, err)
 		return err
+	}
+
+	// The session takes its replacement timeout from the record at login, so
+	// setting it any later leaves the session on the old value. Logging in
+	// anyway would leave the volume less tolerant of a path outage than asked
+	// for, with nothing to show for it.
+	if d.tools.ISCSIReplacementTimeout > 0 {
+		if err := d.tools.iscsiadm_update_node_replacement_timeout(targetIqn, portal); err != nil {
+			log.Errorf("Failed to set replacement timeout %ds on target [%s] portal [%s]: %v",
+				d.tools.ISCSIReplacementTimeout, targetIqn, portal, err)
+			return err
+		}
 	}
 
 	if err := d.tools.iscsiadm_login(targetIqn, portal); err != nil {

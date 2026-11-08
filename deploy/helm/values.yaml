@@ -74,6 +74,11 @@ node:
   kubeletPath: /var/lib/kubelet
   # Run host tools (iscsiadm, multipath) through a chroot into the host's root.
   supportChrootDir: true
+  # Seconds an iSCSI session waits for a lost path to come back before failing
+  # I/O; btrfs then turns read-only. Applies to sessions logged in from then on.
+  # If empty, the node's default applies (node.session.timeo.replacement_timeout
+  # in iscsid.conf, usually 120).
+  ##iscsiReplacementTimeout: 300
   extraArgs: []
   # - --iscsiadm-path=/usr/local/sbin/iscsiadm
 # Snapshot support: the csi-snapshotter sidecar and the VolumeSnapshotClasses below.

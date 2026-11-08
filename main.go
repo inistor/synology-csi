@@ -36,6 +36,8 @@ var (
 	multipathPath  = ""
 	multipathdPath = ""
 	nvmePath       = ""
+	// iSCSI
+	iscsiReplacementTimeout = 0
 )
 
 var rootCmd = &cobra.Command{
@@ -98,6 +100,7 @@ func driverStart() error {
 		return err
 	}
 	tools := driver.NewTools(cmdExecutor)
+	tools.ISCSIReplacementTimeout = iscsiReplacementTimeout
 
 	// 3. Create and Run the Driver
 	drv, err := driver.NewControllerAndNodeDriver(csiDriverName, csiNodeID, csiEndpoint, dsmService, tools)
@@ -139,6 +142,8 @@ func addFlags(cmd *cobra.Command) {
 	cmd.PersistentFlags().StringVar(&multipathPath, "multipath-path", multipathPath, "Full path of multipath executable")
 	cmd.PersistentFlags().StringVar(&multipathdPath, "multipathd-path", multipathdPath, "Full path of multipathd executable")
 	cmd.PersistentFlags().StringVar(&nvmePath, "nvme-path", nvmePath, "Full path of nvme executable")
+	cmd.PersistentFlags().IntVar(&iscsiReplacementTimeout, "iscsi-replacement-timeout", iscsiReplacementTimeout,
+		"Seconds an iSCSI session waits for its path to come back before failing I/O (0 keeps the node's default)")
 
 	cmd.MarkFlagRequired("endpoint")
 	cmd.MarkFlagRequired("client-info")

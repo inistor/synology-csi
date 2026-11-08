@@ -166,6 +166,15 @@ clients:
 - *insecureSkipVerify* (optional): disables certificate verification. **Not recommended**: it exposes the DSM
   credentials to anyone in the middle. Use *tlsCACert* instead.
 
+### iSCSI path outages
+
+When the path to DSM drops (a switch reboot, a cable), an iSCSI session waits for it to come back for its
+*replacement timeout*, then fails I/O, and a btrfs or ext4 filesystem on the volume goes read-only until its pod
+is recreated. The node's default is usually 120 seconds (`node.session.timeo.replacement_timeout` in
+`/etc/iscsi/iscsid.conf`). Set the chart's `node.iscsiReplacementTimeout` to give the driver's own sessions a
+longer one, e.g. `300`, without touching the node's default for anything else. It takes effect for sessions
+logged in from then on: volumes already attached keep their timeout until they next attach.
+
 ### StorageClasses
 
 Define them in the chart's `storageClasses` value or apply your own; [deploy/example](deploy/example) has one per
